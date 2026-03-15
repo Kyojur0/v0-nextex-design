@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import {
@@ -55,6 +56,19 @@ export function Header({
   isBuilding,
 }: HeaderProps) {
   const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  // Prevent hydration mismatch by only rendering theme icon after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const ThemeIcon = () => {
+    if (!mounted) return <Monitor className="h-4 w-4" />
+    if (theme === "dark") return <Moon className="h-4 w-4" />
+    if (theme === "light") return <Sun className="h-4 w-4" />
+    return <Monitor className="h-4 w-4" />
+  }
 
   return (
     <header className="h-12 border-b border-border bg-background flex items-center justify-between px-4 select-none">
@@ -210,13 +224,7 @@ export function Header({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-              {theme === "dark" ? (
-                <Moon className="h-4 w-4" />
-              ) : theme === "light" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Monitor className="h-4 w-4" />
-              )}
+              <ThemeIcon />
               <span className="sr-only">Toggle theme</span>
             </Button>
           </DropdownMenuTrigger>
