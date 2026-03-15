@@ -169,11 +169,8 @@ export const AdvancedSettings = memo(function AdvancedSettings({
 
             <div className="space-y-2">
               <Label htmlFor="font-size">Font Size</Label>
-              <Select value={settings.fontSize.toString()}>
-                <SelectTrigger
-                  id="font-size"
-                  onValueChange={handleFontSizeChange}
-                >
+              <Select value={settings.fontSize.toString()} onValueChange={handleFontSizeChange}>
+                <SelectTrigger id="font-size">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -188,8 +185,8 @@ export const AdvancedSettings = memo(function AdvancedSettings({
 
             <div className="space-y-2">
               <Label htmlFor="tab-size">Tab Size</Label>
-              <Select value={settings.tabSize.toString()}>
-                <SelectTrigger id="tab-size" onValueChange={handleTabSizeChange}>
+              <Select value={settings.tabSize.toString()} onValueChange={handleTabSizeChange}>
+                <SelectTrigger id="tab-size">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

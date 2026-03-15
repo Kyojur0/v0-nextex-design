@@ -42,7 +42,7 @@ interface HeaderProps {
 }
 
 const ThemeSelector = memo(function ThemeSelector() {
-  const { setTheme, theme } = useTheme()
+  const { setTheme } = useTheme()
 
   const handleThemeChange = useCallback((newTheme: string) => {
     setTheme(newTheme)
@@ -52,13 +52,7 @@ const ThemeSelector = memo(function ThemeSelector() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-          {theme === "dark" ? (
-            <Moon className="h-4 w-4" />
-          ) : theme === "light" ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Monitor className="h-4 w-4" />
-          )}
+          <Monitor className="h-4 w-4" />
           <span className="sr-only">Toggle theme</span>
         </Button>
       </DropdownMenuTrigger>
