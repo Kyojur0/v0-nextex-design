@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from "react"
 import { ThemeProvider } from "next-themes"
 import { Header } from "@/components/editor/header"
 import { FileTree } from "@/components/editor/file-tree"
-import { SmoothCodeEditor } from "@/components/editor/smooth-code-editor"
+import { EnhancedCodeEditor } from "@/components/editor/enhanced-code-editor"
 import { PdfPreview } from "@/components/editor/pdf-preview"
 import { BuildLog } from "@/components/editor/build-log"
 import { TemplateModal } from "@/components/editor/template-modal"
 import { AdvancedSettings } from "@/components/editor/advanced-settings"
 import { LayoutWrapper } from "@/components/editor/layout-wrapper"
+import { ResizablePanels } from "@/components/editor/resizable-panels"
 import { ColorPaletteProvider } from "@/lib/color-palette-context"
 import { useEditorStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -275,35 +276,40 @@ export default function EditorPage() {
               )}
             />
 
-            {/* Editor and Preview Area */}
+            {/* Editor and Preview Area - Resizable */}
             <div className="flex-1 flex overflow-hidden">
-              {/* Code Editor */}
-              <div className="flex-1 flex flex-col min-w-0 p-4">
-                <SmoothCodeEditor
-                  content={content}
-                  onChange={handleContentChange}
-                  fileName={
-                    files.find((f) => f.id === activeFileId)?.name ||
-                    "Untitled"
-                  }
-                  fontSize={settings.fontSize}
-                  tabSize={settings.tabSize}
-                />
-              </div>
+              <ResizablePanels
+                direction="vertical"
+                initialRatio={0.5}
+                minSize={300}
+                className="flex-1"
+              >
+                {/* Code Editor */}
+                <div className="flex flex-col min-w-0 p-4 overflow-auto">
+                  <EnhancedCodeEditor
+                    content={content}
+                    onChange={handleContentChange}
+                    fileName={
+                      files.find((f) => f.id === activeFileId)?.name ||
+                      "Untitled"
+                    }
+                    fontSize={settings.fontSize}
+                    tabSize={settings.tabSize}
+                    enableSyntaxHighlight={settings.enableSyntaxHighlight}
+                  />
+                </div>
 
-              {/* Divider */}
-              <div className="w-1 bg-border" />
-
-              {/* PDF Preview */}
-              <div className="flex-1 flex flex-col min-w-0 p-4">
-                <PdfPreview
-                  fileName={
-                    files.find((f) => f.id === activeFileId)?.name ||
-                    "Untitled"
-                  }
-                  isBuilding={isBuilding}
-                />
-              </div>
+                {/* PDF Preview */}
+                <div className="flex flex-col min-w-0 p-4 overflow-auto">
+                  <PdfPreview
+                    fileName={
+                      files.find((f) => f.id === activeFileId)?.name ||
+                      "Untitled"
+                    }
+                    isBuilding={isBuilding}
+                  />
+                </div>
+              </ResizablePanels>
             </div>
           </div>
 

@@ -125,7 +125,7 @@ export const SmoothCodeEditor = memo(function SmoothCodeEditor({
           className={cn(
             "flex-1 bg-transparent text-editor-cursor font-mono p-4 resize-none outline-none",
             "scrollbar-thin placeholder-muted-foreground/50",
-            "whitespace-pre overflow-wrap-off"
+            "whitespace-pre-wrap break-words"
           )}
           style={{
             fontSize: `${fontSize}px`,

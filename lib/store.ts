@@ -18,6 +18,7 @@ export interface EditorSettings {
   buildOnSave: boolean
   compiler: 'pdflatex' | 'xetex' | 'luatex'
   colorPalette: 'monochrome' | 'blue' | 'emerald' | 'warm' | 'minimal'
+  enableSyntaxHighlight: boolean
 }
 
 export interface FileOperation {
@@ -112,6 +113,7 @@ export const useEditorStore = create<EditorStore>()(
         buildOnSave: false,
         compiler: 'pdflatex',
         colorPalette: 'monochrome',
+        enableSyntaxHighlight: false,
       },
       
       // Actions

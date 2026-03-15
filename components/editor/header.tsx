@@ -157,7 +157,7 @@ export function Header({
   }, [onOpenSettings])
 
   return (
-    <header className="h-12 border-b border-border bg-background flex items-center justify-between px-4 select-none transition-colors">
+    <header suppressHydrationWarning className="h-12 border-b border-border bg-background flex items-center justify-between px-4 select-none transition-colors">
       {/* Left: Logo and Project Name */}
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex items-center gap-2 shrink-0">

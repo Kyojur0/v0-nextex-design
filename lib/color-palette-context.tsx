@@ -12,8 +12,11 @@ export function ColorPaletteProvider({ children }: { children: React.ReactNode }
   const { settings, setSettings } = useEditorStore()
 
   useEffect(() => {
-    // Apply color palette to root element
-    document.documentElement.setAttribute('data-color-palette', settings.colorPalette)
+    // Apply color palette to root and html element
+    const htmlElement = document.documentElement
+    htmlElement.setAttribute('data-color-palette', settings.colorPalette)
+    // Also apply to body to ensure children inherit
+    document.body.setAttribute('data-color-palette', settings.colorPalette)
   }, [settings.colorPalette])
 
   const setPalette = (palette: string) => {
@@ -22,7 +25,9 @@ export function ColorPaletteProvider({ children }: { children: React.ReactNode }
 
   return (
     <ColorPaletteContext.Provider value={{ palette: settings.colorPalette, setPalette }}>
-      {children}
+      <div data-color-palette={settings.colorPalette} suppressHydrationWarning>
+        {children}
+      </div>
     </ColorPaletteContext.Provider>
   )
 }

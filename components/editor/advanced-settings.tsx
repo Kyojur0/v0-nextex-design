@@ -98,7 +98,7 @@ export const AdvancedSettings = memo(function AdvancedSettings({
   )
 
   const handleToggleChange = useCallback(
-    (key: 'wordWrap' | 'autoSave' | 'buildOnSave', value: boolean) => {
+    (key: 'wordWrap' | 'autoSave' | 'buildOnSave' | 'enableSyntaxHighlight', value: boolean) => {
       setSettings({ [key]: value })
     },
     [setSettings]
@@ -206,6 +206,17 @@ export const AdvancedSettings = memo(function AdvancedSettings({
                 checked={settings.wordWrap}
                 onCheckedChange={(checked) =>
                   handleToggleChange("wordWrap", checked)
+                }
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="syntax-highlight">Syntax Highlighting</Label>
+              <Switch
+                id="syntax-highlight"
+                checked={settings.enableSyntaxHighlight}
+                onCheckedChange={(checked) =>
+                  handleToggleChange("enableSyntaxHighlight", checked)
                 }
               />
             </div>
