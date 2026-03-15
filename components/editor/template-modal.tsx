@@ -1,139 +1,118 @@
 "use client"
 
-import { useState } from "react"
-import { cn } from "@/lib/utils"
+import { memo, useState, useCallback } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { X, FileText, Check } from "lucide-react"
+import { FileText, Check } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-const templates = [
+const TEMPLATES = [
   {
     id: "minimal",
     name: "Minimal",
     description: "Clean and simple, perfect for tech roles",
+    icon: "📄",
   },
   {
     id: "professional",
     name: "Professional",
     description: "Traditional format for corporate positions",
+    icon: "💼",
   },
   {
     id: "modern",
     name: "Modern",
     description: "Contemporary design with elegant typography",
+    icon: "✨",
   },
   {
     id: "academic",
     name: "Academic",
     description: "Structured format for research positions",
+    icon: "🎓",
   },
   {
     id: "creative",
     name: "Creative",
     description: "Unique layout for design and creative roles",
+    icon: "🎨",
   },
 ]
 
 interface TemplateModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSelect: (templateId: string) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
-export function TemplateModal({ isOpen, onClose, onSelect }: TemplateModalProps) {
+export const TemplateModal = memo(function TemplateModal({
+  open,
+  onOpenChange,
+}: TemplateModalProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
 
-  if (!isOpen) return null
+  const handleSelect = useCallback((templateId: string) => {
+    setSelectedTemplate(templateId)
+  }, [])
+
+  const handleCreate = useCallback(() => {
+    if (selectedTemplate) {
+      // In real app: create new project from template
+      console.log(`Creating project from template: ${selectedTemplate}`)
+      onOpenChange(false)
+      setSelectedTemplate(null)
+    }
+  }, [selectedTemplate, onOpenChange])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Choose a Resume Template</DialogTitle>
+          <DialogDescription>
+            Select a template to get started with a professionally designed resume.
+          </DialogDescription>
+        </DialogHeader>
 
-      {/* Modal */}
-      <div className="relative w-full max-w-2xl mx-4 bg-card border border-border rounded-lg shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-semibold">New from Template</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Choose a template to get started quickly
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
+        <div className="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
+          {TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => handleSelect(template.id)}
+              className={cn(
+                "p-4 rounded-lg border-2 transition-all text-left",
+                selectedTemplate === template.id
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <div className="text-2xl mb-2">{template.icon}</div>
+              <h3 className="font-semibold text-sm">{template.name}</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {template.description}
+              </p>
+            </button>
+          ))}
         </div>
 
-        {/* Templates grid */}
-        <div className="p-6">
-          <div className="grid grid-cols-2 gap-4">
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                className={cn(
-                  "flex flex-col items-start p-4 rounded-lg border-2 transition-all text-left",
-                  selectedTemplate === template.id
-                    ? "border-foreground bg-accent"
-                    : "border-border hover:border-foreground/50 hover:bg-accent/50"
-                )}
-                onClick={() => setSelectedTemplate(template.id)}
-              >
-                <div className="w-full aspect-[8.5/11] bg-muted rounded-sm mb-3 flex items-center justify-center relative overflow-hidden">
-                  <FileText className="h-8 w-8 text-muted-foreground/30" />
-                  {/* Simulated template preview lines */}
-                  <div className="absolute inset-4">
-                    <div className="w-1/2 h-2 bg-foreground/10 rounded mx-auto mb-2" />
-                    <div className="w-3/4 h-1 bg-foreground/5 rounded mx-auto mb-3" />
-                    <div className="w-full h-px bg-foreground/10 mb-2" />
-                    <div className="space-y-1">
-                      <div className="w-full h-1 bg-foreground/5 rounded" />
-                      <div className="w-5/6 h-1 bg-foreground/5 rounded" />
-                      <div className="w-4/6 h-1 bg-foreground/5 rounded" />
-                    </div>
-                  </div>
-                  {selectedTemplate === template.id && (
-                    <div className="absolute inset-0 bg-foreground/10 flex items-center justify-center">
-                      <div className="w-6 h-6 rounded-full bg-foreground flex items-center justify-center">
-                        <Check className="h-4 w-4 text-background" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <span className="font-medium text-sm">{template.name}</span>
-                <span className="text-xs text-muted-foreground mt-0.5">
-                  {template.description}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/30">
-          <Button variant="ghost" onClick={onClose}>
+        <div className="flex justify-end gap-2 border-t pt-4 mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            onClick={handleCreate}
             disabled={!selectedTemplate}
-            onClick={() => {
-              if (selectedTemplate) {
-                onSelect(selectedTemplate)
-                onClose()
-              }
-            }}
           >
-            Create Document
+            <FileText className="mr-2 h-4 w-4" />
+            Create from Template
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
-}
+})

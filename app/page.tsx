@@ -1,128 +1,140 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
-import { ThemeProvider } from "@/components/theme-provider"
+import { useCallback, useEffect, useState } from "react"
+import { ThemeProvider } from "next-themes"
 import { Header } from "@/components/editor/header"
-import { FileExplorer } from "@/components/editor/file-explorer"
-import { CodeEditor } from "@/components/editor/code-editor"
+import { FileTree } from "@/components/editor/file-tree"
+import { SmoothCodeEditor } from "@/components/editor/smooth-code-editor"
 import { PdfPreview } from "@/components/editor/pdf-preview"
 import { BuildLog } from "@/components/editor/build-log"
 import { TemplateModal } from "@/components/editor/template-modal"
-import { SettingsPanel } from "@/components/editor/settings-panel"
-import { sampleResumeContent } from "@/lib/editor-store"
+import { AdvancedSettings } from "@/components/editor/advanced-settings"
+import { LayoutWrapper } from "@/components/editor/layout-wrapper"
+import { ColorPaletteProvider } from "@/lib/color-palette-context"
+import { useEditorStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-// Sample file structure
-const sampleFiles = [
-  {
-    id: "folder-1",
-    name: "my-resume",
-    type: "folder" as const,
-    children: [
-      { id: "file-1", name: "resume.tex", type: "file" as const, isMain: true },
-      { id: "file-2", name: "sections.tex", type: "file" as const },
-      { id: "file-3", name: "style.sty", type: "file" as const },
-    ],
-  },
-]
+// Sample resume content
+const SAMPLE_RESUME = `\\documentclass{article}
+\\usepackage[margin=0.5in]{geometry}
+\\usepackage{hyperref}
 
-// Sample build logs
-const sampleLogs = [
-  { type: "info" as const, message: "Starting pdfLaTeX compilation...", timestamp: "10:32:15" },
-  { type: "info" as const, message: "Processing resume.tex", timestamp: "10:32:15" },
-  { type: "warning" as const, message: "Underfull \\hbox (badness 10000) in paragraph", line: 24, timestamp: "10:32:16" },
-  { type: "success" as const, message: "Output written to resume.pdf (1 page)", timestamp: "10:32:17" },
-]
+\\title{John Doe}
+\\author{}
+\\date{}
+
+\\begin{document}
+
+\\maketitle
+
+\\section*{CONTACT}
+Email: john@example.com | Phone: (555) 123-4567 | LinkedIn: linkedin.com/in/johndoe
+
+\\section*{PROFESSIONAL SUMMARY}
+Experienced software engineer with 5+ years of expertise in full-stack development, cloud architecture, and team leadership.
+
+\\section*{EXPERIENCE}
+
+\\textbf{Senior Software Engineer} | Tech Company Inc. | Jan 2021 - Present
+\\begin{itemize}
+  \\item Led development of microservices architecture handling 10M+ requests/day
+  \\item Mentored 3 junior developers and conducted technical interviews
+  \\item Reduced system latency by 40% through optimization efforts
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{Bachelor of Science in Computer Science}\\\\
+State University | Graduated: May 2018
+
+\\section*{SKILLS}
+
+\\textbf{Languages:} Python, JavaScript, TypeScript, Go, SQL\\\\
+\\textbf{Frameworks:} React, Node.js, FastAPI, Kubernetes\\\\
+\\textbf{Tools:} Docker, AWS, PostgreSQL, Git
+
+\\end{document}`
 
 export default function EditorPage() {
-  const [content, setContent] = useState(sampleResumeContent)
-  const [isModified, setIsModified] = useState(false)
-  const [activeFileId, setActiveFileId] = useState<string | null>("file-1")
-  const [isBuilding, setIsBuilding] = useState(false)
-  const [hasError, setHasError] = useState(false)
-  const [showBuildLog, setShowBuildLog] = useState(true)
-  const [showTemplateModal, setShowTemplateModal] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(240)
-  const [isDragging, setIsDragging] = useState(false)
-  const [settings, setSettings] = useState({
-    fontSize: 14,
-    tabSize: 2,
-    wordWrap: true,
-    autoSave: true,
-    buildOnSave: false,
-    compiler: "pdflatex",
-  })
+  const {
+    files,
+    activeFileId,
+    projectName,
+    content,
+    isModified,
+    isBuilding,
+    showBuildLog,
+    showTemplateModal,
+    showSettings,
+    sidebarWidth,
+    isDragging,
+    settings,
+    buildLogs,
+    setActiveFile,
+    setContent,
+    setIsModified,
+    setIsBuilding,
+    setShowBuildLog,
+    setShowTemplateModal,
+    setShowSettings,
+    setSidebarWidth,
+    setIsDragging,
+    setFiles,
+    setBuildLogs,
+  } = useEditorStore()
 
-  const handleContentChange = useCallback((newContent: string) => {
-    setContent(newContent)
-    setIsModified(true)
-  }, [])
+  const [mounted, setMounted] = useState(false)
 
-  const handleBuild = useCallback(() => {
-    setIsBuilding(true)
-    setHasError(false)
-    // Simulate build process
-    setTimeout(() => {
-      setIsBuilding(false)
-    }, 2000)
-  }, [])
-
-  const handleSave = useCallback(() => {
-    setIsModified(false)
-    // In real app: save to file system
-  }, [])
-
-  const handleOpenFolder = useCallback(() => {
-    // In real app: use File System Access API
-    console.log("Open folder dialog")
-  }, [])
-
-  const handleOpenFile = useCallback(() => {
-    // In real app: use File System Access API
-    console.log("Open file dialog")
-  }, [])
-
-  const handleTemplateSelect = useCallback((templateId: string) => {
-    // In real app: load template content
-    console.log("Selected template:", templateId)
-    setShowTemplateModal(false)
-  }, [])
-
-  // Keyboard shortcuts
+  // Initialize with sample data
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey) {
-        switch (e.key) {
-          case "s":
-            e.preventDefault()
-            handleSave()
-            break
-          case "b":
-            e.preventDefault()
-            handleBuild()
-            break
-          case "n":
-            e.preventDefault()
-            setShowTemplateModal(true)
-            break
-        }
-      }
+    setMounted(true)
+    if (files.length === 0) {
+      setFiles([
+        {
+          id: "folder-1",
+          name: "my-resume",
+          type: "folder",
+          children: [
+            {
+              id: "file-1",
+              name: "resume.tex",
+              type: "file",
+              isMain: true,
+              content: SAMPLE_RESUME,
+            },
+            {
+              id: "file-2",
+              name: "sections.tex",
+              type: "file",
+              content: "% Include your sections here\n",
+            },
+            {
+              id: "file-3",
+              name: "style.sty",
+              type: "file",
+              content: "% Custom style definitions\n",
+            },
+          ],
+        },
+      ])
+      setActiveFile("file-1", SAMPLE_RESUME)
     }
+  }, [files.length, setFiles, setActiveFile])
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [handleSave, handleBuild])
-
-  // Resize handling
-  const handleMouseDown = useCallback(() => {
-    setIsDragging(true)
-  }, [])
+  // Handle sidebar resize
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      setIsDragging(true)
+      e.preventDefault()
+    },
+    [setIsDragging]
+  )
 
   useEffect(() => {
+    if (!isDragging) return
+
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return
-      const newWidth = Math.max(180, Math.min(400, e.clientX))
+      const newWidth = Math.max(150, Math.min(500, e.clientX))
       setSidebarWidth(newWidth)
     }
 
@@ -130,103 +142,192 @@ export default function EditorPage() {
       setIsDragging(false)
     }
 
-    if (isDragging) {
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
-    }
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", handleMouseUp)
 
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", handleMouseUp)
     }
-  }, [isDragging])
+  }, [isDragging, setSidebarWidth, setIsDragging])
+
+  // Handle file selection
+  const handleFileSelect = useCallback(
+    (fileId: string) => {
+      const findFileContent = (items: any[]): string | null => {
+        for (const item of items) {
+          if (item.id === fileId) {
+            return item.content || ""
+          }
+          if (item.children) {
+            const found = findFileContent(item.children)
+            if (found !== null) return found
+          }
+        }
+        return null
+      }
+
+      const fileContent = findFileContent(files)
+      if (fileContent !== null) {
+        setActiveFile(fileId, fileContent)
+      }
+    },
+    [files, setActiveFile]
+  )
+
+  // Handle content change
+  const handleContentChange = useCallback(
+    (newContent: string) => {
+      setContent(newContent)
+      setIsModified(true)
+    },
+    [setContent, setIsModified]
+  )
+
+  // Handle build
+  const handleBuild = useCallback(() => {
+    setIsBuilding(true)
+    // Simulate build process
+    const newLogs = [
+      { type: "info" as const, message: "Starting pdfLaTeX compilation...", timestamp: new Date().toLocaleTimeString() },
+      { type: "info" as const, message: `Processing ${activeFileId || "document"}.tex`, timestamp: new Date().toLocaleTimeString() },
+      { type: "success" as const, message: "Output written to PDF (1 page, 142.5 KB)", timestamp: new Date().toLocaleTimeString() },
+    ]
+    setBuildLogs(newLogs)
+    setShowBuildLog(true)
+
+    setTimeout(() => {
+      setIsBuilding(false)
+    }, 2000)
+  }, [setIsBuilding, setBuildLogs, setShowBuildLog, activeFileId])
+
+  // Handle save
+  const handleSave = useCallback(() => {
+    setIsModified(false)
+    // In real app: save to file system
+  }, [setIsModified])
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + S: Save
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault()
+        handleSave()
+      }
+      // Cmd/Ctrl + B: Build
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault()
+        handleBuild()
+      }
+      // Cmd/Ctrl + K: Focus search (can be extended later)
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleSave, handleBuild])
+
+  if (!mounted) {
+    return null
+  }
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-      <div className="h-screen flex flex-col bg-background overflow-hidden select-none">
-        <Header
-          projectName="my-resume"
-          isModified={isModified}
-          onOpenFolder={handleOpenFolder}
-          onOpenFile={handleOpenFile}
-          onSave={handleSave}
-          onSaveAs={() => {}}
-          onBuild={handleBuild}
-          onNewFromTemplate={() => setShowTemplateModal(true)}
-          onOpenSettings={() => setShowSettings(true)}
-          isBuilding={isBuilding}
-        />
-
-        <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar */}
-          <div
-            className="flex-shrink-0 border-r border-border"
-            style={{ width: sidebarWidth }}
-          >
-            <FileExplorer
-              files={sampleFiles}
-              activeFileId={activeFileId}
-              onFileSelect={setActiveFileId}
-              onNewFile={() => {}}
-            />
-          </div>
-
-          {/* Resize handle */}
-          <div
-            className={cn(
-              "w-1 cursor-col-resize hover:bg-border transition-colors flex-shrink-0",
-              isDragging && "bg-border"
-            )}
-            onMouseDown={handleMouseDown}
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem suppressHydrationWarning>
+      <ColorPaletteProvider>
+        <LayoutWrapper>
+          {/* Header */}
+          <Header
+            onOpenFolder={() => console.log("Open folder")}
+            onOpenFile={() => console.log("Open file")}
+            onSave={handleSave}
+            onSaveAs={() => console.log("Save as")}
+            onBuild={handleBuild}
+            onNewFromTemplate={() => setShowTemplateModal(true)}
+            onOpenSettings={() => setShowSettings(true)}
           />
 
-          {/* Main content area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Main Content */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Sidebar - File Explorer */}
+            <div
+              style={{ width: `${sidebarWidth}px` }}
+              className={cn(
+                "flex flex-col transition-all",
+                isDragging && "select-none"
+              )}
+            >
+              <FileTree
+                files={files}
+                activeFileId={activeFileId}
+                onFileSelect={handleFileSelect}
+              />
+            </div>
+
+            {/* Resize Handle */}
+            <div
+              onMouseDown={handleMouseDown}
+              className={cn(
+                "w-1 bg-border hover:bg-muted-foreground/20 cursor-col-resize transition-colors",
+                isDragging && "bg-muted-foreground/40"
+              )}
+            />
+
+            {/* Editor and Preview Area */}
             <div className="flex-1 flex overflow-hidden">
-              {/* Editor */}
-              <div className="flex-1 min-w-0">
-                <CodeEditor
+              {/* Code Editor */}
+              <div className="flex-1 flex flex-col min-w-0 p-4">
+                <SmoothCodeEditor
                   content={content}
                   onChange={handleContentChange}
-                  fileName="resume.tex"
+                  fileName={
+                    files.find((f) => f.id === activeFileId)?.name ||
+                    "Untitled"
+                  }
                   fontSize={settings.fontSize}
+                  tabSize={settings.tabSize}
                 />
               </div>
 
-              {/* Vertical divider */}
-              <div className="w-px bg-border flex-shrink-0" />
+              {/* Divider */}
+              <div className="w-1 bg-border" />
 
               {/* PDF Preview */}
-              <div className="flex-1 min-w-0">
-                <PdfPreview isBuilding={isBuilding} hasError={hasError} />
+              <div className="flex-1 flex flex-col min-w-0 p-4">
+                <PdfPreview
+                  fileName={
+                    files.find((f) => f.id === activeFileId)?.name ||
+                    "Untitled"
+                  }
+                  isBuilding={isBuilding}
+                />
               </div>
             </div>
-
-            {/* Build Log */}
-            <BuildLog
-              logs={sampleLogs}
-              isVisible={showBuildLog}
-              onClose={() => setShowBuildLog(false)}
-              onToggle={() => setShowBuildLog(!showBuildLog)}
-              onGoToLine={(line) => console.log("Go to line:", line)}
-            />
           </div>
-        </div>
 
-        {/* Modals */}
-        <TemplateModal
-          isOpen={showTemplateModal}
-          onClose={() => setShowTemplateModal(false)}
-          onSelect={handleTemplateSelect}
-        />
+          {/* Build Log Panel */}
+          {showBuildLog && (
+            <div className="h-40 border-t border-border bg-panel-bg">
+              <BuildLog
+                logs={buildLogs}
+                onClose={() => setShowBuildLog(false)}
+              />
+            </div>
+          )}
 
-        <SettingsPanel
-          isOpen={showSettings}
-          onClose={() => setShowSettings(false)}
-          settings={settings}
-          onSettingsChange={setSettings}
-        />
-      </div>
+          {/* Modals */}
+          <TemplateModal
+            open={showTemplateModal}
+            onOpenChange={setShowTemplateModal}
+          />
+          <AdvancedSettings
+            open={showSettings}
+            onOpenChange={setShowSettings}
+          />
+        </LayoutWrapper>
+      </ColorPaletteProvider>
     </ThemeProvider>
   )
 }

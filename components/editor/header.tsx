@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { memo, useCallback } from "react"
 import { useTheme } from "next-themes"
+import { useEditorStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -31,8 +32,6 @@ import {
 } from "lucide-react"
 
 interface HeaderProps {
-  projectName: string
-  isModified: boolean
   onOpenFolder: () => void
   onOpenFile: () => void
   onSave: () => void
@@ -40,12 +39,111 @@ interface HeaderProps {
   onBuild: () => void
   onNewFromTemplate: () => void
   onOpenSettings: () => void
-  isBuilding: boolean
 }
 
+const ThemeSelector = memo(function ThemeSelector() {
+  const { setTheme, theme } = useTheme()
+
+  const handleThemeChange = useCallback((newTheme: string) => {
+    setTheme(newTheme)
+  }, [setTheme])
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+          {theme === "dark" ? (
+            <Moon className="h-4 w-4" />
+          ) : theme === "light" ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Monitor className="h-4 w-4" />
+          )}
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => handleThemeChange("light")}>
+          <Sun className="mr-2 h-4 w-4" />
+          Light
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleThemeChange("dark")}>
+          <Moon className="mr-2 h-4 w-4" />
+          Dark
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleThemeChange("system")}>
+          <Monitor className="mr-2 h-4 w-4" />
+          System
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+})
+
+const FileMenu = memo(function FileMenu({
+  onNewFromTemplate,
+  onOpenFolder,
+  onOpenFile,
+  onSave,
+  onSaveAs,
+}: Pick<HeaderProps, 'onNewFromTemplate' | 'onOpenFolder' | 'onOpenFile' | 'onSave' | 'onSaveAs'>) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-medium">
+          File
+          <ChevronDown className="ml-1 h-3 w-3 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuItem onClick={onNewFromTemplate}>
+          <Plus className="mr-2 h-4 w-4" />
+          New from Template
+          <span className="ml-auto text-xs text-muted-foreground">Cmd+N</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onOpenFolder}>
+          <FolderOpen className="mr-2 h-4 w-4" />
+          Open Folder
+          <span className="ml-auto text-xs text-muted-foreground">Cmd+O</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onOpenFile}>
+          <File className="mr-2 h-4 w-4" />
+          Open File
+        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Clock className="mr-2 h-4 w-4" />
+            Recent Files
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem>
+              <FileText className="mr-2 h-4 w-4" />
+              resume.tex
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <FileText className="mr-2 h-4 w-4" />
+              cover-letter.tex
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onSave}>
+          <Save className="mr-2 h-4 w-4" />
+          Save
+          <span className="ml-auto text-xs text-muted-foreground">Cmd+S</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onSaveAs}>
+          <Download className="mr-2 h-4 w-4" />
+          Save As...
+          <span className="ml-auto text-xs text-muted-foreground">Cmd+Shift+S</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+})
+
 export function Header({
-  projectName,
-  isModified,
   onOpenFolder,
   onOpenFile,
   onSave,
@@ -53,100 +151,49 @@ export function Header({
   onBuild,
   onNewFromTemplate,
   onOpenSettings,
-  isBuilding,
 }: HeaderProps) {
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
+  const { projectName, isModified, isBuilding } = useEditorStore()
 
-  // Prevent hydration mismatch by only rendering theme icon after mount
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const handleBuild = useCallback(() => {
+    onBuild()
+  }, [onBuild])
 
-  const ThemeIcon = () => {
-    if (!mounted) return <Monitor className="h-4 w-4" />
-    if (theme === "dark") return <Moon className="h-4 w-4" />
-    if (theme === "light") return <Sun className="h-4 w-4" />
-    return <Monitor className="h-4 w-4" />
-  }
+  const handleOpenSettings = useCallback(() => {
+    onOpenSettings()
+  }, [onOpenSettings])
 
   return (
-    <header className="h-12 border-b border-border bg-background flex items-center justify-between px-4 select-none">
+    <header className="h-12 border-b border-border bg-background flex items-center justify-between px-4 select-none transition-colors">
       {/* Left: Logo and Project Name */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-4 min-w-0">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="w-6 h-6 rounded bg-foreground flex items-center justify-center">
             <span className="text-background text-xs font-bold">T</span>
           </div>
           <span className="font-semibold text-sm tracking-tight">TeXPress</span>
         </div>
         
-        <div className="h-4 w-px bg-border" />
+        <div className="h-4 w-px bg-border shrink-0" />
         
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm text-muted-foreground truncate">
             {projectName}
           </span>
           {isModified && (
-            <span className="w-2 h-2 rounded-full bg-foreground/50" />
+            <span className="w-2 h-2 rounded-full bg-foreground/50 shrink-0" />
           )}
         </div>
       </div>
 
       {/* Center: Menu Items */}
-      <nav className="flex items-center gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-medium">
-              File
-              <ChevronDown className="ml-1 h-3 w-3 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52">
-            <DropdownMenuItem onClick={onNewFromTemplate}>
-              <Plus className="mr-2 h-4 w-4" />
-              New from Template
-              <span className="ml-auto text-xs text-muted-foreground">Cmd+N</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onOpenFolder}>
-              <FolderOpen className="mr-2 h-4 w-4" />
-              Open Folder
-              <span className="ml-auto text-xs text-muted-foreground">Cmd+O</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenFile}>
-              <File className="mr-2 h-4 w-4" />
-              Open File
-            </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Clock className="mr-2 h-4 w-4" />
-                Recent Files
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem>
-                  <FileText className="mr-2 h-4 w-4" />
-                  resume.tex
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <FileText className="mr-2 h-4 w-4" />
-                  cover-letter.tex
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onSave}>
-              <Save className="mr-2 h-4 w-4" />
-              Save
-              <span className="ml-auto text-xs text-muted-foreground">Cmd+S</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onSaveAs}>
-              <Download className="mr-2 h-4 w-4" />
-              Save As...
-              <span className="ml-auto text-xs text-muted-foreground">Cmd+Shift+S</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <nav className="flex items-center gap-1 flex-1 justify-center px-4">
+        <FileMenu
+          onNewFromTemplate={onNewFromTemplate}
+          onOpenFolder={onOpenFolder}
+          onOpenFile={onOpenFile}
+          onSave={onSave}
+          onSaveAs={onSaveAs}
+        />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -210,46 +257,25 @@ export function Header({
       </nav>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <Button
           variant="ghost"
           size="sm"
           className="h-7 w-7 p-0"
-          onClick={onOpenSettings}
+          onClick={handleOpenSettings}
         >
           <Settings className="h-4 w-4" />
           <span className="sr-only">Settings</span>
         </Button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-              <ThemeIcon />
-              <span className="sr-only">Toggle theme</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setTheme("light")}>
-              <Sun className="mr-2 h-4 w-4" />
-              Light
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("dark")}>
-              <Moon className="mr-2 h-4 w-4" />
-              Dark
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
-              <Monitor className="mr-2 h-4 w-4" />
-              System
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ThemeSelector />
 
         <div className="h-4 w-px bg-border" />
 
         <Button
           size="sm"
           className="h-7 px-3 text-xs font-medium gap-1.5"
-          onClick={onBuild}
+          onClick={handleBuild}
           disabled={isBuilding}
         >
           <Play className="h-3 w-3" />

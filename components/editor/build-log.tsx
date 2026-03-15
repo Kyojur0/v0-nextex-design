@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { memo, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { X, ChevronDown, ChevronUp, AlertCircle, CheckCircle, XCircle } from "lucide-react"
+import { X, AlertCircle, AlertTriangle, CheckCircle, Info } from "lucide-react"
 
 interface LogEntry {
   type: "info" | "warning" | "error" | "success"
@@ -14,116 +14,90 @@ interface LogEntry {
 
 interface BuildLogProps {
   logs: LogEntry[]
-  isVisible: boolean
   onClose: () => void
-  onToggle: () => void
-  onGoToLine: (line: number) => void
 }
 
-export function BuildLog({
+const getLogIcon = (type: string) => {
+  switch (type) {
+    case "error":
+      return <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+    case "warning":
+      return <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+    case "success":
+      return <CheckCircle className="h-4 w-4 text-success shrink-0" />
+    default:
+      return <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+  }
+}
+
+const LogEntryComponent = memo(function LogEntry({ log }: { log: LogEntry }) {
+  return (
+    <div className="flex gap-3 text-xs p-2 border-b border-border hover:bg-muted/50 transition-colors">
+      {getLogIcon(log.type)}
+      <div className="flex-1 min-w-0">
+        <p className="text-muted-foreground">{log.message}</p>
+        <div className="flex gap-2 mt-1">
+          {log.line && <span className="text-muted-foreground/60">Line {log.line}</span>}
+          <span className="text-muted-foreground/60 ml-auto shrink-0">{log.timestamp}</span>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+export const BuildLog = memo(function BuildLog({
   logs,
-  isVisible,
   onClose,
-  onToggle,
-  onGoToLine,
 }: BuildLogProps) {
   const errorCount = logs.filter((l) => l.type === "error").length
   const warningCount = logs.filter((l) => l.type === "warning").length
   const hasErrors = errorCount > 0
 
-  if (!isVisible) {
-    return (
-      <button
-        onClick={onToggle}
-        className={cn(
-          "h-7 flex items-center gap-2 px-3 border-t border-border bg-background text-xs",
-          hasErrors ? "text-destructive" : "text-muted-foreground"
-        )}
-      >
-        <ChevronUp className="h-3.5 w-3.5" />
-        Build Log
-        {errorCount > 0 && (
-          <span className="flex items-center gap-1">
-            <XCircle className="h-3 w-3" />
-            {errorCount}
-          </span>
-        )}
-        {warningCount > 0 && (
-          <span className="flex items-center gap-1 text-[var(--warning)]">
-            <AlertCircle className="h-3 w-3" />
-            {warningCount}
-          </span>
-        )}
-      </button>
-    )
-  }
-
   return (
-    <div className="border-t border-border bg-background">
+    <div className="flex flex-col h-full bg-panel-bg">
       {/* Header */}
-      <div className="h-8 flex items-center justify-between px-3 border-b border-border">
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-medium">Build Log</span>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {errorCount > 0 && (
-              <span className="flex items-center gap-1 text-destructive">
-                <XCircle className="h-3 w-3" />
-                {errorCount} errors
-              </span>
-            )}
-            {warningCount > 0 && (
-              <span className="flex items-center gap-1 text-[var(--warning)]">
-                <AlertCircle className="h-3 w-3" />
-                {warningCount} warnings
-              </span>
-            )}
-          </div>
+      <div className="h-9 border-b border-panel-border bg-muted/30 px-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-foreground">Build Log</span>
+          {hasErrors && (
+            <span className="flex items-center gap-1 text-xs text-destructive">
+              <AlertCircle className="h-3 w-3" />
+              {errorCount} error{errorCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {!hasErrors && warningCount > 0 && (
+            <span className="flex items-center gap-1 text-xs text-warning">
+              <AlertTriangle className="h-3 w-3" />
+              {warningCount} warning{warningCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {!hasErrors && warningCount === 0 && logs.length > 0 && (
+            <span className="flex items-center gap-1 text-xs text-success">
+              <CheckCircle className="h-3 w-3" />
+              Success
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0"
-            onClick={onToggle}
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0"
-            onClick={onClose}
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={onClose}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      {/* Log entries */}
-      <div className="h-32 overflow-y-auto scrollbar-thin p-2 font-mono text-xs">
-        {logs.map((log, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex items-start gap-2 py-1 px-2 rounded hover:bg-accent/50 cursor-pointer",
-              log.type === "error" && "text-destructive",
-              log.type === "warning" && "text-[var(--warning)]",
-              log.type === "success" && "text-[var(--success)]"
-            )}
-            onClick={() => log.line && onGoToLine(log.line)}
-          >
-            {log.type === "error" && <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
-            {log.type === "warning" && <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
-            {log.type === "success" && <CheckCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
-            {log.type === "info" && <span className="w-3.5 shrink-0" />}
-            <span className="text-muted-foreground shrink-0">[{log.timestamp}]</span>
-            {log.line && (
-              <span className="text-muted-foreground shrink-0">Line {log.line}:</span>
-            )}
-            <span className="break-all">{log.message}</span>
+      {/* Logs */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        {logs.length === 0 ? (
+          <div className="p-4 text-xs text-muted-foreground text-center">
+            No build logs yet. Click Build to compile.
           </div>
-        ))}
+        ) : (
+          logs.map((log, i) => <LogEntryComponent key={i} log={log} />)
+        )}
       </div>
     </div>
   )
-}
+})
