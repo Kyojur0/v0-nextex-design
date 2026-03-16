@@ -1,72 +1,79 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ThemeProvider } from "next-themes"
 import { Header } from "@/components/editor/header"
 import { FileTree } from "@/components/editor/file-tree"
 import { EnhancedCodeEditor } from "@/components/editor/enhanced-code-editor"
 import { PdfPreview } from "@/components/editor/pdf-preview"
-import { BuildLog } from "@/components/editor/build-log"
+import { SmartTerminal } from "@/components/editor/smart-terminal"
 import { TemplateModal } from "@/components/editor/template-modal"
 import { AdvancedSettings } from "@/components/editor/advanced-settings"
 import { LayoutWrapper } from "@/components/editor/layout-wrapper"
-import { ResizablePanels } from "@/components/editor/resizable-panels"
+import { VersionHistory } from "@/components/editor/version-history"
+import { AISpotlight } from "@/components/editor/ai-spotlight"
 import { ColorPaletteProvider } from "@/lib/color-palette-context"
 import { useEditorStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-// Sample resume content
 const SAMPLE_RESUME = `\\documentclass{article}
 \\usepackage[margin=0.5in]{geometry}
 \\usepackage{hyperref}
-
-\\title{John Doe}
-\\author{}
-\\date{}
+\\usepackage{enumitem}
 
 \\begin{document}
 
-\\maketitle
-
-\\section*{CONTACT}
-Email: john@example.com | Phone: (555) 123-4567 | LinkedIn: linkedin.com/in/johndoe
+\\begin{center}
+  {\\LARGE \\textbf{John Doe}} \\\\[4pt]
+  john@example.com $\\cdot$ (555) 123-4567 $\\cdot$ linkedin.com/in/johndoe
+\\end{center}
 
 \\section*{PROFESSIONAL SUMMARY}
-Experienced software engineer with 5+ years of expertise in full-stack development, cloud architecture, and team leadership.
+Experienced software engineer with 5+ years of expertise in full-stack development, cloud architecture, and team leadership. Passionate about building scalable systems and mentoring engineers.
 
 \\section*{EXPERIENCE}
 
-\\textbf{Senior Software Engineer} | Tech Company Inc. | Jan 2021 - Present
-\\begin{itemize}
+\\textbf{Senior Software Engineer} \\hfill Jan 2021 -- Present \\\\
+\\textit{Tech Company Inc., San Francisco, CA}
+\\begin{itemize}[leftmargin=*,nosep]
   \\item Led development of microservices architecture handling 10M+ requests/day
-  \\item Mentored 3 junior developers and conducted technical interviews
-  \\item Reduced system latency by 40% through optimization efforts
+  \\item Mentored 3 junior developers and conducted 50+ technical interviews
+  \\item Reduced system latency by 40\\% through caching and query optimization
+\\end{itemize}
+
+\\textbf{Software Engineer} \\hfill Jun 2018 -- Dec 2020 \\\\
+\\textit{Startup Co., New York, NY}
+\\begin{itemize}[leftmargin=*,nosep]
+  \\item Built React dashboard used by 10,000+ daily active users
+  \\item Designed and implemented REST API with Node.js and PostgreSQL
 \\end{itemize}
 
 \\section*{EDUCATION}
 
-\\textbf{Bachelor of Science in Computer Science}\\\\
-State University | Graduated: May 2018
+\\textbf{Bachelor of Science in Computer Science} \\hfill May 2018 \\\\
+\\textit{State University}
 
 \\section*{SKILLS}
 
-\\textbf{Languages:} Python, JavaScript, TypeScript, Go, SQL\\\\
-\\textbf{Frameworks:} React, Node.js, FastAPI, Kubernetes\\\\
-\\textbf{Tools:} Docker, AWS, PostgreSQL, Git
+\\textbf{Languages:} Python, JavaScript, TypeScript, Go, SQL \\\\
+\\textbf{Frameworks:} React, Node.js, FastAPI, Next.js \\\\
+\\textbf{Tools:} Docker, AWS, PostgreSQL, Redis, Git
 
 \\end{document}`
 
-export default function EditorPage() {
+function EditorInner() {
   const {
     files,
     activeFileId,
-    projectName,
     content,
     isModified,
     isBuilding,
     showBuildLog,
     showTemplateModal,
     showSettings,
+    showPreview,
+    showHistory,
+    showAISpotlight,
     sidebarWidth,
     isDragging,
     settings,
@@ -78,6 +85,9 @@ export default function EditorPage() {
     setShowBuildLog,
     setShowTemplateModal,
     setShowSettings,
+    setShowPreview,
+    setShowHistory,
+    setShowAISpotlight,
     setSidebarWidth,
     setIsDragging,
     setFiles,
@@ -85,8 +95,11 @@ export default function EditorPage() {
   } = useEditorStore()
 
   const [mounted, setMounted] = useState(false)
+  // Horizontal split ratio between editor and preview (0.55 default = editor takes 55%)
+  const [splitRatio, setSplitRatio] = useState(0.55)
+  const splitDragging = useRef(false)
+  const splitContainerRef = useRef<HTMLDivElement>(null)
 
-  // Initialize with sample data
   useEffect(() => {
     setMounted(true)
     if (files.length === 0) {
@@ -96,25 +109,9 @@ export default function EditorPage() {
           name: "my-resume",
           type: "folder",
           children: [
-            {
-              id: "file-1",
-              name: "resume.tex",
-              type: "file",
-              isMain: true,
-              content: SAMPLE_RESUME,
-            },
-            {
-              id: "file-2",
-              name: "sections.tex",
-              type: "file",
-              content: "% Include your sections here\n",
-            },
-            {
-              id: "file-3",
-              name: "style.sty",
-              type: "file",
-              content: "% Custom style definitions\n",
-            },
+            { id: "file-1", name: "resume.tex", type: "file", isMain: true, content: SAMPLE_RESUME },
+            { id: "file-2", name: "sections.tex", type: "file", content: "% Additional sections\n" },
+            { id: "file-3", name: "style.sty", type: "file", content: "% Custom style definitions\n" },
           ],
         },
       ])
@@ -122,217 +119,225 @@ export default function EditorPage() {
     }
   }, [files.length, setFiles, setActiveFile])
 
-  // Handle sidebar resize
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      setIsDragging(true)
-      e.preventDefault()
-    },
-    [setIsDragging]
-  )
+  // Sidebar resize
+  const handleSidebarMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true)
+    e.preventDefault()
+  }, [setIsDragging])
 
   useEffect(() => {
     if (!isDragging) return
-
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.max(150, Math.min(500, e.clientX))
-      setSidebarWidth(newWidth)
+      setSidebarWidth(Math.max(150, Math.min(500, e.clientX)))
     }
-
-    const handleMouseUp = () => {
-      setIsDragging(false)
-    }
-
+    const handleMouseUp = () => setIsDragging(false)
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-
     return () => {
       window.removeEventListener("mousemove", handleMouseMove)
       window.removeEventListener("mouseup", handleMouseUp)
     }
   }, [isDragging, setSidebarWidth, setIsDragging])
 
-  // Handle file selection
-  const handleFileSelect = useCallback(
-    (fileId: string) => {
-      const findFileContent = (items: any[]): string | null => {
-        for (const item of items) {
-          if (item.id === fileId) {
-            return item.content || ""
-          }
-          if (item.children) {
-            const found = findFileContent(item.children)
-            if (found !== null) return found
-          }
+  // Horizontal editor/preview split resize
+  const handleSplitMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    splitDragging.current = true
+  }, [])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!splitDragging.current || !splitContainerRef.current) return
+      const rect = splitContainerRef.current.getBoundingClientRect()
+      const newRatio = Math.max(0.25, Math.min(0.8, (e.clientX - rect.left) / rect.width))
+      setSplitRatio(newRatio)
+    }
+    const handleMouseUp = () => { splitDragging.current = false }
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", handleMouseUp)
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [])
+
+  const handleFileSelect = useCallback((fileId: string) => {
+    const findFileContent = (items: typeof files): string | null => {
+      for (const item of items) {
+        if (item.id === fileId) return item.content || ""
+        if (item.children) {
+          const found = findFileContent(item.children)
+          if (found !== null) return found
         }
-        return null
       }
+      return null
+    }
+    const fileContent = findFileContent(files)
+    if (fileContent !== null) setActiveFile(fileId, fileContent)
+  }, [files, setActiveFile])
 
-      const fileContent = findFileContent(files)
-      if (fileContent !== null) {
-        setActiveFile(fileId, fileContent)
-      }
-    },
-    [files, setActiveFile]
-  )
+  const handleContentChange = useCallback((newContent: string) => {
+    setContent(newContent)
+    setIsModified(true)
+  }, [setContent, setIsModified])
 
-  // Handle content change
-  const handleContentChange = useCallback(
-    (newContent: string) => {
-      setContent(newContent)
-      setIsModified(true)
-    },
-    [setContent, setIsModified]
-  )
-
-  // Handle build
   const handleBuild = useCallback(() => {
     setIsBuilding(true)
-    // Simulate build process
-    const newLogs = [
-      { type: "info" as const, message: "Starting pdfLaTeX compilation...", timestamp: new Date().toLocaleTimeString() },
-      { type: "info" as const, message: `Processing ${activeFileId || "document"}.tex`, timestamp: new Date().toLocaleTimeString() },
-      { type: "success" as const, message: "Output written to PDF (1 page, 142.5 KB)", timestamp: new Date().toLocaleTimeString() },
-    ]
-    setBuildLogs(newLogs)
     setShowBuildLog(true)
-
+    const ts = new Date().toLocaleTimeString()
+    const fileName = activeFileId ? (files.flatMap(f => f.children || []).find(f => f.id === activeFileId)?.name || "document") : "document"
+    setBuildLogs([
+      { type: "info", message: `Starting ${settings.compiler} compilation...`, timestamp: ts },
+      { type: "info", message: `Processing ${fileName}`, timestamp: ts },
+      { type: "info", message: "Running pass 1/2...", timestamp: ts },
+      { type: "info", message: "Running pass 2/2...", timestamp: ts },
+    ])
     setTimeout(() => {
+      const ts2 = new Date().toLocaleTimeString()
+      setBuildLogs([
+        { type: "info", message: `Starting ${settings.compiler} compilation...`, timestamp: ts },
+        { type: "info", message: `Processing ${fileName}`, timestamp: ts },
+        { type: "success", message: "Compiled successfully in 1.4s (1 page, 138KB)", timestamp: ts2 },
+      ])
       setIsBuilding(false)
-    }, 2000)
-  }, [setIsBuilding, setBuildLogs, setShowBuildLog, activeFileId])
+    }, 1800)
+  }, [setIsBuilding, setShowBuildLog, setBuildLogs, activeFileId, files, settings.compiler])
 
-  // Handle save
   const handleSave = useCallback(() => {
     setIsModified(false)
-    // In real app: save to file system
   }, [setIsModified])
 
-  // Handle keyboard shortcuts
+  const handleJumpToLine = useCallback((line: number) => {
+    // Broadcast to the editor to jump to that line
+    window.dispatchEvent(new CustomEvent("editor:jump-to-line", { detail: { line } }))
+  }, [])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + S: Save
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault()
-        handleSave()
-      }
-      // Cmd/Ctrl + B: Build
-      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-        e.preventDefault()
-        handleBuild()
-      }
-      // Cmd/Ctrl + K: Focus search (can be extended later)
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault()
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); handleSave() }
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") { e.preventDefault(); handleBuild() }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setShowAISpotlight(true) }
+      if (e.key === "Escape") { setShowAISpotlight(false) }
     }
-
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [handleSave, handleBuild])
+  }, [handleSave, handleBuild, setShowAISpotlight])
 
-  if (!mounted) {
-    return null
-  }
+  if (!mounted) return null
+
+  const activeFileName = (() => {
+    const flat = (items: typeof files): typeof files => items.flatMap(i => i.type === "folder" ? flat(i.children || []) : [i])
+    return flat(files).find(f => f.id === activeFileId)?.name || "Untitled"
+  })()
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem suppressHydrationWarning>
-      <ColorPaletteProvider>
-        <LayoutWrapper>
-          {/* Header */}
-          <Header
-            onOpenFolder={() => console.log("Open folder")}
-            onOpenFile={() => console.log("Open file")}
-            onSave={handleSave}
-            onSaveAs={() => console.log("Save as")}
-            onBuild={handleBuild}
-            onNewFromTemplate={() => setShowTemplateModal(true)}
-            onOpenSettings={() => setShowSettings(true)}
-          />
+    <LayoutWrapper>
+      <Header
+        onOpenFolder={() => {}}
+        onOpenFile={() => {}}
+        onSave={handleSave}
+        onSaveAs={() => {}}
+        onBuild={handleBuild}
+        onNewFromTemplate={() => setShowTemplateModal(true)}
+        onOpenSettings={() => setShowSettings(true)}
+        onTogglePreview={() => setShowPreview(!showPreview)}
+        showPreview={showPreview}
+      />
 
-          {/* Main Content */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Sidebar - File Explorer */}
-            <div
-              style={{ width: `${sidebarWidth}px` }}
-              className={cn(
-                "flex flex-col transition-all",
-                isDragging && "select-none"
-              )}
-            >
-              <FileTree
-                files={files}
-                activeFileId={activeFileId}
-                onFileSelect={handleFileSelect}
-              />
-            </div>
+      {/* Main workspace */}
+      <div className="flex-1 flex overflow-hidden">
 
-            {/* Resize Handle */}
-            <div
-              onMouseDown={handleMouseDown}
-              className={cn(
-                "w-1 bg-border hover:bg-muted-foreground/20 cursor-col-resize transition-colors",
-                isDragging && "bg-muted-foreground/40"
-              )}
+        {/* Left sidebar: file tree or version history */}
+        <div style={{ width: `${sidebarWidth}px` }} className={cn("flex flex-col border-r border-border shrink-0 overflow-hidden", isDragging && "select-none")}>
+          {showHistory ? (
+            <VersionHistory onClose={() => setShowHistory(false)} />
+          ) : (
+            <FileTree
+              files={files}
+              activeFileId={activeFileId}
+              onFileSelect={handleFileSelect}
+              onShowHistory={() => setShowHistory(true)}
             />
+          )}
+        </div>
 
-            {/* Editor and Preview Area - Resizable */}
-            <div className="flex-1 flex overflow-hidden">
-              <ResizablePanels
-                direction="vertical"
-                initialRatio={0.5}
-                minSize={300}
-                className="flex-1"
-              >
-                {/* Code Editor */}
-                <div className="flex flex-col min-w-0 p-4 overflow-auto">
-                  <EnhancedCodeEditor
-                    content={content}
-                    onChange={handleContentChange}
-                    fileName={
-                      files.find((f) => f.id === activeFileId)?.name ||
-                      "Untitled"
-                    }
-                    fontSize={settings.fontSize}
-                    tabSize={settings.tabSize}
-                    enableSyntaxHighlight={settings.enableSyntaxHighlight}
-                  />
-                </div>
+        {/* Sidebar resize handle */}
+        <div
+          onMouseDown={handleSidebarMouseDown}
+          className={cn("w-1 bg-border hover:bg-primary/30 cursor-col-resize transition-colors shrink-0", isDragging && "bg-primary/40")}
+        />
 
-                {/* PDF Preview */}
-                <div className="flex flex-col min-w-0 p-4 overflow-auto">
-                  <PdfPreview
-                    fileName={
-                      files.find((f) => f.id === activeFileId)?.name ||
-                      "Untitled"
-                    }
-                    isBuilding={isBuilding}
-                  />
-                </div>
-              </ResizablePanels>
-            </div>
+        {/* Editor + Preview horizontal split */}
+        <div ref={splitContainerRef} className="flex-1 flex overflow-hidden">
+          {/* Code editor */}
+          <div style={{ width: showPreview ? `${splitRatio * 100}%` : "100%" }} className="flex flex-col overflow-hidden transition-all duration-200 p-3">
+            <EnhancedCodeEditor
+              content={content}
+              onChange={handleContentChange}
+              fileName={activeFileName}
+              fontSize={settings.fontSize}
+              tabSize={settings.tabSize}
+              enableSyntaxHighlight={settings.enableSyntaxHighlight}
+              wordWrap={settings.wordWrap}
+              onAISpotlight={() => setShowAISpotlight(true)}
+            />
           </div>
 
-          {/* Build Log Panel */}
-          {showBuildLog && (
-            <div className="h-40 border-t border-border bg-panel-bg">
-              <BuildLog
-                logs={buildLogs}
-                onClose={() => setShowBuildLog(false)}
+          {/* Horizontal divider (only when preview visible) */}
+          {showPreview && (
+            <div
+              onMouseDown={handleSplitMouseDown}
+              className="w-1 bg-border hover:bg-primary/30 cursor-col-resize transition-colors shrink-0"
+            />
+          )}
+
+          {/* PDF preview */}
+          {showPreview && (
+            <div style={{ width: `${(1 - splitRatio) * 100}%` }} className="flex flex-col overflow-hidden p-3">
+              <PdfPreview
+                fileName={activeFileName.replace(".tex", ".pdf")}
+                isBuilding={isBuilding}
               />
             </div>
           )}
+        </div>
+      </div>
 
-          {/* Modals */}
-          <TemplateModal
-            open={showTemplateModal}
-            onOpenChange={setShowTemplateModal}
-          />
-          <AdvancedSettings
-            open={showSettings}
-            onOpenChange={setShowSettings}
-          />
-        </LayoutWrapper>
+      {/* Smart Terminal - collapsible bottom panel */}
+      <SmartTerminal
+        logs={buildLogs}
+        isBuilding={isBuilding}
+        isOpen={showBuildLog}
+        onToggle={() => setShowBuildLog(!showBuildLog)}
+        onJumpToLine={handleJumpToLine}
+      />
+
+      {/* AI Spotlight modal */}
+      {showAISpotlight && (
+        <AISpotlight
+          selectedCode={content}
+          currentContent={content}
+          onAccept={(newContent) => {
+            handleContentChange(newContent)
+            setShowAISpotlight(false)
+          }}
+          onClose={() => setShowAISpotlight(false)}
+          aiModel={settings.aiModel}
+        />
+      )}
+
+      {/* Modals */}
+      <TemplateModal open={showTemplateModal} onOpenChange={setShowTemplateModal} />
+      <AdvancedSettings open={showSettings} onOpenChange={setShowSettings} />
+    </LayoutWrapper>
+  )
+}
+
+export default function EditorPage() {
+  return (
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem suppressHydrationWarning>
+      <ColorPaletteProvider>
+        <EditorInner />
       </ColorPaletteProvider>
     </ThemeProvider>
   )

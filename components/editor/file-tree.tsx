@@ -13,6 +13,7 @@ import {
   Trash2,
   Edit2,
   MoreVertical,
+  Clock,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -181,12 +182,14 @@ interface FileTreeProps {
   files: FileItem[]
   activeFileId: string | null
   onFileSelect: (id: string) => void
+  onShowHistory: () => void
 }
 
 export const FileTree = memo(function FileTree({
   files,
   activeFileId,
   onFileSelect,
+  onShowHistory,
 }: FileTreeProps) {
   const { projectName, createFile } = useEditorStore()
 
@@ -241,6 +244,17 @@ export const FileTree = memo(function FileTree({
             />
           ))
         )}
+      </div>
+
+      {/* Footer: History tab */}
+      <div className="shrink-0 border-t border-sidebar-border">
+        <button
+          onClick={onShowHistory}
+          className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+        >
+          <Clock className="h-3.5 w-3.5 shrink-0" />
+          Version History
+        </button>
       </div>
     </div>
   )
