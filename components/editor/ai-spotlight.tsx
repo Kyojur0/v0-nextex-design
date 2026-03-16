@@ -126,9 +126,11 @@ export const AISpotlight = memo(function AISpotlight({
               <Sparkles className="h-3.5 w-3.5 text-primary" />
             </div>
             <span className="text-sm font-semibold">AI Assistant</span>
-            <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-muted font-mono">
-              {aiModel.split("/").pop()}
-            </span>
+            {aiModel && (
+              <span className="text-xs text-muted-foreground px-1.5 py-0.5 rounded bg-muted font-mono">
+                {aiModel.split("/").pop() || "Model"}
+              </span>
+            )}
           </div>
           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
             <X className="h-4 w-4" />
