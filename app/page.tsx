@@ -12,6 +12,7 @@ import { AdvancedSettings } from "@/components/editor/advanced-settings"
 import { LayoutWrapper } from "@/components/editor/layout-wrapper"
 import { VersionHistory } from "@/components/editor/version-history"
 import { AISpotlight } from "@/components/editor/ai-spotlight"
+import { SelectionPopover } from "@/components/editor/selection-popover"
 import { ColorPaletteProvider } from "@/lib/color-palette-context"
 import { useEditorStore } from "@/lib/store"
 import {
@@ -67,6 +68,9 @@ function EditorInner() {
   const [mounted, setMounted] = useState(false)
   // Horizontal split ratio between editor and preview (editor takes splitRatio%)
   const [splitRatio, setSplitRatio] = useState(0.55)
+  // Selection popover state
+  const [selectedText, setSelectedText] = useState("")
+  const [selectionAnchor, setSelectionAnchor] = useState<HTMLTextAreaElement | null>(null)
   const splitDragging = useRef(false)
   const splitContainerRef = useRef<HTMLDivElement>(null)
 
@@ -156,16 +160,10 @@ function EditorInner() {
     setIsModified(true)
   }, [setContent, setIsModified])
 
-  // ── Save ───────────────────────────────────────────────────────────────────
-  const handleSave = useCallback(async () => {
-    if (!activeFileId) return
-    const result = await writeFile({ id: activeFileId, content })
-    if (result.ok) {
-      setIsModified(false)
-    }
-  }, [activeFileId, content, setIsModified])
-
   // ── Build ──────────────────────────────────────────────────────────────────
+  // Declared before handleSave so it can be referenced via ref below.
+  const handleBuildRef = useRef<() => Promise<void>>(async () => {})
+
   const handleBuild = useCallback(async () => {
     if (!activeFileId) return
     setIsBuilding(true)
@@ -195,6 +193,22 @@ function EditorInner() {
     }
     setIsBuilding(false)
   }, [activeFileId, settings.compiler, setIsBuilding, setShowBuildLog, setBuildLogs, setPdfUrl, setCurrentBuildId])
+
+  // Keep ref current so handleSave can call it without a circular dep
+  useEffect(() => { handleBuildRef.current = handleBuild }, [handleBuild])
+
+  // ── Save ───────────────────────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    if (!activeFileId) return
+    const result = await writeFile({ id: activeFileId, content })
+    if (result.ok) {
+      setIsModified(false)
+      // Build-on-save: only trigger if enabled and not already building
+      if (settings.buildOnSave && !isBuilding) {
+        setTimeout(() => handleBuildRef.current(), 0)
+      }
+    }
+  }, [activeFileId, content, setIsModified, settings.buildOnSave, isBuilding])
 
   // ── File tree mutations (call API then refresh tree) ───────────────────────
   const handleRename = useCallback(async (id: string, newName: string) => {
@@ -229,6 +243,20 @@ function EditorInner() {
       }
     }
   }, [refreshFileTree, setActiveFile, setIsModified])
+
+  // ── Selection popover ──────────────────────────────────────────────────────
+  const handleSelectionChange = useCallback(
+    (text: string, anchor: HTMLTextAreaElement | null) => {
+      setSelectedText(text)
+      setSelectionAnchor(anchor)
+    },
+    []
+  )
+
+  const handleAIFromSelection = useCallback((text: string) => {
+    // Pre-fill the spotlight with selected text and open it
+    setShowAISpotlight(true)
+  }, [setShowAISpotlight])
 
   // ── Jump to line (from terminal) ───────────────────────────────────────────
   const handleJumpToLine = useCallback((line: number) => {
@@ -322,6 +350,7 @@ function EditorInner() {
             <EnhancedCodeEditor
               content={content}
               onChange={handleContentChange}
+              onSelectionChange={handleSelectionChange}
               fileName={activeFileName}
               fontSize={settings.fontSize}
               tabSize={settings.tabSize}
@@ -375,6 +404,18 @@ function EditorInner() {
           }}
           onClose={() => setShowAISpotlight(false)}
           aiModel={settings.aiModel ?? "openai/gpt-4o-mini"}
+        />
+      )}
+
+      {/* Selection popover */}
+      {selectedText && selectionAnchor && (
+        <SelectionPopover
+          selectedText={selectedText}
+          anchorEl={selectionAnchor}
+          content={content}
+          onAskAI={handleAIFromSelection}
+          onDismiss={() => { setSelectedText(""); setSelectionAnchor(null) }}
+          onContentChange={handleContentChange}
         />
       )}
 

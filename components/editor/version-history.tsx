@@ -9,6 +9,8 @@ import {
   RotateCcw,
   Plus,
   Trash2,
+  GitCompare,
+  ChevronLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -26,22 +28,150 @@ interface VersionHistoryProps {
 
 function formatRelativeTime(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
-  const seconds = Math.floor(diff / 1000)
-  if (seconds < 60) return "just now"
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
+  const s = Math.floor(diff / 1000)
+  if (s < 60) return "just now"
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d ago`
   return new Date(isoString).toLocaleDateString()
 }
 
+// ── Minimal line-level diff ───────────────────────────────────────────────────
+type DiffRow =
+  | { kind: "same"; text: string }
+  | { kind: "removed"; text: string }
+  | { kind: "added"; text: string }
+
+function diffLines(a: string, b: string): DiffRow[] {
+  const aLines = a.split("\n")
+  const bLines = b.split("\n")
+  const rows: DiffRow[] = []
+
+  // Simple LCS-less approach: build a "unified" view by pairing lines.
+  // For a real diff we'd use Myers; for the sidebar this is good enough.
+  const maxLen = Math.max(aLines.length, bLines.length)
+  for (let i = 0; i < maxLen; i++) {
+    const aLine = aLines[i]
+    const bLine = bLines[i]
+    if (aLine === undefined) {
+      rows.push({ kind: "added", text: bLine })
+    } else if (bLine === undefined) {
+      rows.push({ kind: "removed", text: aLine })
+    } else if (aLine === bLine) {
+      rows.push({ kind: "same", text: aLine })
+    } else {
+      rows.push({ kind: "removed", text: aLine })
+      rows.push({ kind: "added", text: bLine })
+    }
+  }
+  return rows
+}
+
+// ── Commit message input ──────────────────────────────────────────────────────
+interface CommitInputProps {
+  onCommit: (message: string) => void
+  isLoading: boolean
+}
+
+function CommitInput({ onCommit, isLoading }: CommitInputProps) {
+  const [msg, setMsg] = useState("")
+  return (
+    <div className="flex gap-2 px-3 py-2 border-b border-border shrink-0">
+      <input
+        value={msg}
+        onChange={(e) => setMsg(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && msg.trim()) { onCommit(msg.trim()); setMsg("") }
+        }}
+        placeholder="Commit message... (Enter)"
+        className="flex-1 text-xs bg-muted/40 border border-border/60 rounded px-2 py-1 outline-none focus:border-primary/50 placeholder:text-muted-foreground/50"
+        disabled={isLoading}
+      />
+      <Button
+        size="sm"
+        className="h-6 px-2 text-xs"
+        disabled={!msg.trim() || isLoading}
+        onClick={() => { onCommit(msg.trim()); setMsg("") }}
+      >
+        <Plus className="h-3 w-3" />
+      </Button>
+    </div>
+  )
+}
+
+// ── Diff view panel ───────────────────────────────────────────────────────────
+interface DiffViewProps {
+  version: VersionSnapshot
+  currentContent: string
+  onBack: () => void
+  onRestore: () => void
+}
+
+function DiffView({ version, currentContent, onBack, onRestore }: DiffViewProps) {
+  const rows = diffLines(version.content, currentContent)
+  const removed = rows.filter((r) => r.kind === "removed").length
+  const added = rows.filter((r) => r.kind === "added").length
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Back
+        </button>
+        <div className="flex items-center gap-2 text-xs">
+          {removed > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-600 dark:text-red-400">
+              -{removed}
+            </span>
+          )}
+          {added > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+              +{added}
+            </span>
+          )}
+        </div>
+        <Button size="sm" className="h-6 px-2.5 text-xs gap-1" onClick={onRestore}>
+          <RotateCcw className="h-3 w-3" />
+          Restore
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-thin font-mono text-xs">
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            className={cn(
+              "px-3 py-0 leading-5 whitespace-pre-wrap break-all",
+              row.kind === "removed" && "bg-red-500/10 text-red-700 dark:text-red-300",
+              row.kind === "added" && "bg-green-500/10 text-green-700 dark:text-green-300",
+              row.kind === "same" && "text-muted-foreground/60"
+            )}
+          >
+            {row.kind === "removed" && <span className="select-none mr-1 opacity-60">-</span>}
+            {row.kind === "added" && <span className="select-none mr-1 opacity-60">+</span>}
+            {row.kind === "same" && <span className="select-none mr-1 opacity-0">·</span>}
+            {row.text || " "}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export const VersionHistory = memo(function VersionHistory({ onClose }: VersionHistoryProps) {
   const { activeFileId, content, setContent, setIsModified } = useEditorStore()
   const [versions, setVersions] = useState<VersionSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [previewVersion, setPreviewVersion] = useState<VersionSnapshot | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [diffTarget, setDiffTarget] = useState<VersionSnapshot | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingLabel, setEditingLabel] = useState("")
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -54,37 +184,38 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
     setIsLoading(false)
   }, [activeFileId])
 
-  useEffect(() => {
-    loadVersions()
-  }, [loadVersions])
+  useEffect(() => { loadVersions() }, [loadVersions])
 
-  // Auto-save a version every 2 minutes when content changes
+  // Auto-save every 2 minutes
   useEffect(() => {
     if (!activeFileId || !content) return
     const timer = setTimeout(async () => {
-      const result = await saveVersion(activeFileId, content, "Auto-saved", true)
-      if (result.ok) loadVersions()
+      await saveVersion(activeFileId, content, "Auto-saved", true)
+      loadVersions()
     }, 2 * 60 * 1000)
     return () => clearTimeout(timer)
   }, [content, activeFileId, loadVersions])
 
-  const handleSaveNow = useCallback(async () => {
+  const handleCommit = useCallback(async (message: string) => {
     if (!activeFileId) return
-    const result = await saveVersion(activeFileId, content, "Manual save", false)
-    if (result.ok) loadVersions()
+    setIsSaving(true)
+    await saveVersion(activeFileId, content, message, false)
+    await loadVersions()
+    setIsSaving(false)
   }, [activeFileId, content, loadVersions])
 
   const handleToggleStar = useCallback(async (version: VersionSnapshot, e: React.MouseEvent) => {
     e.stopPropagation()
-    const result = await updateVersion(version.id, { isStarred: !version.isStarred })
-    if (result.ok) loadVersions()
+    await updateVersion(version.id, { isStarred: !version.isStarred })
+    loadVersions()
   }, [loadVersions])
 
   const handleDelete = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    const result = await deleteVersion(id)
-    if (result.ok) loadVersions()
-  }, [loadVersions])
+    await deleteVersion(id)
+    loadVersions()
+    if (diffTarget?.id === id) setDiffTarget(null)
+  }, [loadVersions, diffTarget])
 
   const handleStartRename = useCallback((version: VersionSnapshot, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -95,21 +226,29 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
 
   const handleSaveRename = useCallback(async () => {
     if (!editingId) return
-    const result = await updateVersion(editingId, { label: editingLabel || "Unnamed version" })
-    if (result.ok) loadVersions()
+    await updateVersion(editingId, { label: editingLabel || "Unnamed version" })
     setEditingId(null)
+    loadVersions()
   }, [editingId, editingLabel, loadVersions])
 
   const handleRestore = useCallback(() => {
-    if (!previewVersion) return
-    setContent(previewVersion.content)
+    if (!diffTarget) return
+    setContent(diffTarget.content)
     setIsModified(true)
-    setPreviewVersion(null)
-  }, [previewVersion, setContent, setIsModified])
+    setDiffTarget(null)
+  }, [diffTarget, setContent, setIsModified])
 
-  const handlePreview = useCallback((version: VersionSnapshot) => {
-    setPreviewVersion((prev) => (prev?.id === version.id ? null : version))
-  }, [])
+  // Show diff view if a version is selected
+  if (diffTarget) {
+    return (
+      <DiffView
+        version={diffTarget}
+        currentContent={content}
+        onBack={() => setDiffTarget(null)}
+        onRestore={handleRestore}
+      />
+    )
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -119,35 +258,13 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
           <Clock className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs font-semibold">Version History</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-xs gap-1"
-            onClick={handleSaveNow}
-            title="Save snapshot now"
-          >
-            <Plus className="h-3 w-3" />
-            Save now
-          </Button>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose}>
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      {/* Preview restore bar */}
-      {previewVersion && (
-        <div className="px-3 py-2 bg-primary/10 border-b border-primary/20 shrink-0 flex items-center justify-between">
-          <span className="text-xs text-primary font-medium">
-            Viewing: {previewVersion.label}
-          </span>
-          <Button size="sm" className="h-6 px-2.5 text-xs gap-1" onClick={handleRestore}>
-            <RotateCcw className="h-3 w-3" />
-            Restore
-          </Button>
-        </div>
-      )}
+      {/* Commit message input */}
+      <CommitInput onCommit={handleCommit} isLoading={isSaving} />
 
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
@@ -159,17 +276,9 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
             <div>
               <p className="text-xs font-medium text-muted-foreground">No history yet</p>
               <p className="text-xs text-muted-foreground/60 mt-1">
-                Versions auto-save every 2 minutes, or save manually.
+                Type a commit message above and press Enter, or versions auto-save every 2 minutes.
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={handleSaveNow}
-            >
-              <Plus className="h-3 w-3" /> Save first snapshot
-            </Button>
           </div>
         ) : (
           <div className="py-2 relative">
@@ -177,17 +286,11 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
             <div className="absolute left-[22px] top-4 bottom-4 w-px bg-border" aria-hidden />
 
             {versions.map((version, index) => {
-              const isActive = previewVersion?.id === version.id
               const isEditing = editingId === version.id
-
               return (
                 <div
                   key={version.id}
-                  className={cn(
-                    "flex gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors group relative",
-                    isActive && "bg-primary/5"
-                  )}
-                  onClick={() => handlePreview(version)}
+                  className="flex gap-3 px-3 py-2 hover:bg-muted/50 transition-colors group relative"
                 >
                   {/* Timeline node */}
                   <div className="shrink-0 w-5 h-5 mt-0.5 flex items-center justify-center z-10">
@@ -220,7 +323,7 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
                       />
                     ) : (
                       <p
-                        className="text-xs font-medium leading-tight truncate"
+                        className="text-xs font-medium leading-tight truncate cursor-default"
                         onDoubleClick={(e) => handleStartRename(version, e)}
                         title="Double-click to rename"
                       >
@@ -238,6 +341,13 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
 
                   {/* Actions (hover) */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={() => setDiffTarget(version)}
+                      className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors"
+                      title="Show diff vs current"
+                    >
+                      <GitCompare className="h-3 w-3" />
+                    </button>
                     <button
                       onClick={(e) => handleToggleStar(version, e)}
                       className={cn(

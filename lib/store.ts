@@ -18,6 +18,8 @@ export interface EditorSettings {
   enableSyntaxHighlight: boolean
   aiModel: string
   aiProvider: 'openai' | 'anthropic' | 'google' | 'xai'
+  /** Runtime API key — stored in localStorage, never committed to code */
+  aiApiKey: string
 }
 
 interface EditorStore {
@@ -111,6 +113,7 @@ export const useEditorStore = create<EditorStore>()(
         enableSyntaxHighlight: false,
         aiModel: 'openai/gpt-4o-mini',
         aiProvider: 'openai',
+        aiApiKey: '',
       },
 
       // Actions

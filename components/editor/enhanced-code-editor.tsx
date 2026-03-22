@@ -1,7 +1,7 @@
 "use client"
 
-import { memo, useRef, useEffect, useCallback, useState } from "react"
-import { tokenizeLaTeX, getTokenColor } from "@/lib/syntax-highlighter"
+import { memo, useRef, useEffect, useCallback, useState, useMemo } from "react"
+import { tokenizeLaTeX, renderLine, getTokenColor } from "@/lib/syntax-highlighter"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 import { Sparkles } from "lucide-react"
@@ -9,6 +9,8 @@ import { Sparkles } from "lucide-react"
 interface EnhancedCodeEditorProps {
   content: string
   onChange: (content: string) => void
+  /** Called whenever the selection changes. null rect = selection cleared. */
+  onSelectionChange?: (selected: string, anchorEl: HTMLTextAreaElement | null) => void
   fileName: string
   fontSize?: number
   tabSize?: number
@@ -20,6 +22,7 @@ interface EnhancedCodeEditorProps {
 export const EnhancedCodeEditor = memo(function EnhancedCodeEditor({
   content,
   onChange,
+  onSelectionChange,
   fileName,
   fontSize = 14,
   tabSize = 2,
@@ -28,197 +31,186 @@ export const EnhancedCodeEditor = memo(function EnhancedCodeEditor({
   onAISpotlight,
 }: EnhancedCodeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
+  const lineNumRef = useRef<HTMLDivElement>(null)
   const { theme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [jumpLine, setJumpLine] = useState<number | null>(null)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  useEffect(() => { setMounted(true) }, [])
 
-  // Listen for jump-to-line events from the terminal
+  // ── Jump-to-line from terminal ─────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: CustomEvent<{ line: number }>) => {
-      setJumpLine(e.detail.line)
-      // Scroll to that line in the textarea
-      if (textareaRef.current) {
-        const lines = content.split("\n")
-        const targetLine = Math.max(0, e.detail.line - 1)
-        const charOffset = lines.slice(0, targetLine).join("\n").length
-        textareaRef.current.focus()
-        textareaRef.current.setSelectionRange(charOffset, charOffset + (lines[targetLine]?.length || 0))
-        // Scroll the line into view
-        const lineHeight = fontSize * 1.5
-        textareaRef.current.scrollTop = targetLine * lineHeight - 80
-      }
-      // Clear highlight after 2s
-      setTimeout(() => setJumpLine(null), 2000)
+      const ta = textareaRef.current
+      if (!ta) return
+      const lines = content.split("\n")
+      const targetLine = Math.max(0, e.detail.line - 1)
+      let charOffset = 0
+      for (let i = 0; i < targetLine; i++) charOffset += lines[i].length + 1
+      ta.focus()
+      ta.setSelectionRange(charOffset, charOffset + (lines[targetLine]?.length ?? 0))
+      ta.scrollTop = Math.max(0, targetLine * fontSize * 1.5 - 80)
     }
     window.addEventListener("editor:jump-to-line", handler as EventListener)
     return () => window.removeEventListener("editor:jump-to-line", handler as EventListener)
   }, [content, fontSize])
 
-  // Handle tab key
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Tab") {
+  // ── Tab key ───────────────────────────────────────────────────────────────
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key !== "Tab") return
       e.preventDefault()
-      const textarea = textareaRef.current
-      if (!textarea) return
-
-      const start = textarea.selectionStart
-      const end = textarea.selectionEnd
+      const ta = textareaRef.current
+      if (!ta) return
+      const { selectionStart: s, selectionEnd: end } = ta
       const tab = " ".repeat(tabSize)
+      onChange(content.slice(0, s) + tab + content.slice(end))
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + tabSize })
+    },
+    [content, onChange, tabSize]
+  )
 
-      const newContent =
-        content.substring(0, start) + tab + content.substring(end)
-
-      onChange(newContent)
-
-      // Move cursor after inserted tab
-      setTimeout(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + tabSize
-      }, 0)
-    }
-  }, [content, onChange, tabSize])
-
-  // Handle text changes
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value)
-  }, [onChange])
-
-  // Sync scroll between textarea and highlights
+  // ── Scroll sync ───────────────────────────────────────────────────────────
   const handleScroll = useCallback((e: React.UIEvent<HTMLTextAreaElement>) => {
-    const textarea = e.target as HTMLTextAreaElement
+    const ta = e.currentTarget
     if (highlightRef.current) {
-      highlightRef.current.scrollTop = textarea.scrollTop
-      highlightRef.current.scrollLeft = textarea.scrollLeft
+      highlightRef.current.scrollTop = ta.scrollTop
+      highlightRef.current.scrollLeft = ta.scrollLeft
     }
-    if (containerRef.current?.querySelector('[data-line-numbers]')) {
-      const lineNumbers = containerRef.current.querySelector('[data-line-numbers]') as HTMLElement
-      lineNumbers.scrollTop = textarea.scrollTop
-    }
+    if (lineNumRef.current) lineNumRef.current.scrollTop = ta.scrollTop
   }, [])
 
-  const lines = content.split('\n')
-  const tokens = enableSyntaxHighlight && mounted ? tokenizeLaTeX(content) : []
-  const isDark = mounted && theme === 'dark'
+  // ── Selection reporting ────────────────────────────────────────────────────
+  const notifySelection = useCallback(() => {
+    const ta = textareaRef.current
+    if (!ta || !onSelectionChange) return
+    const { selectionStart: s, selectionEnd: e } = ta
+    if (s === e) { onSelectionChange("", null); return }
+    onSelectionChange(content.slice(s, e), ta)
+  }, [content, onSelectionChange])
 
-  // Build highlighted content by line
-  const highlightedLines = lines.map((line) => {
-    if (!enableSyntaxHighlight || !mounted) return line
+  // ── Tokenise (memoised) ───────────────────────────────────────────────────
+  const tokens = useMemo(
+    () => (enableSyntaxHighlight && mounted ? tokenizeLaTeX(content) : []),
+    [content, enableSyntaxHighlight, mounted]
+  )
 
-    let lineTokens: typeof tokens = []
-    let lineStart = 0
+  // Pre-compute line start offsets once per content change
+  const lines = content.split("\n")
+  const lineOffsets = useMemo(() => {
+    const offsets: number[] = []
+    let pos = 0
+    for (const line of lines) { offsets.push(pos); pos += line.length + 1 }
+    return offsets
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content])
 
-    // Find tokens for this line
-    for (const token of tokens) {
-      const tokenLineStart = content.slice(0, token.start).split('\n').length - 1
-      const tokenLineEnd = content.slice(0, token.end).split('\n').length - 1
-      const currentLineNumber = lines.slice(0, lines.indexOf(line)).length
-
-      if (tokenLineStart === currentLineNumber) {
-        lineTokens.push(token)
-      }
-    }
-
-    return lineTokens
-  })
+  const isDark = mounted && theme === "dark"
 
   return (
-    <div
-      ref={containerRef}
-      className="flex flex-col h-full bg-editor-bg border border-border rounded-lg overflow-hidden"
-    >
-      {/* Header */}
-      <div className="h-9 border-b border-border bg-muted/30 px-4 flex items-center">
+    <div className="flex flex-col h-full bg-editor-bg border border-border rounded-lg overflow-hidden">
+      {/* Tab bar */}
+      <div className="h-9 border-b border-border bg-muted/30 px-4 flex items-center shrink-0">
         <span className="text-xs font-medium text-muted-foreground">{fileName}</span>
       </div>
 
-      {/* Editor Area */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Line Numbers */}
+      {/* Main editor row */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Line numbers */}
         <div
-          data-line-numbers
-          className="overflow-hidden bg-muted/20 select-none"
-          style={{ fontSize: `${fontSize}px` }}
+          ref={lineNumRef}
+          className="overflow-hidden bg-muted/20 select-none shrink-0 border-r border-border/30"
+          style={{ fontSize: `${fontSize}px`, lineHeight: "1.5em" }}
+          aria-hidden
         >
           {lines.map((_, i) => (
             <div
               key={i}
-              className="h-[1.5em] flex items-center justify-end pr-4 text-xs text-muted-foreground border-r border-border/30"
+              className="flex items-center justify-end pr-3 pl-2 text-xs text-muted-foreground/60"
+              style={{ height: "1.5em" }}
             >
               {i + 1}
             </div>
           ))}
         </div>
 
-        {/* Highlight Layer (visible only for syntax highlighting) */}
-        {enableSyntaxHighlight && mounted && (
-          <div
-            ref={highlightRef}
-            className="absolute inset-0 pointer-events-none overflow-hidden font-mono text-sm p-4"
+        {/* Editor pane: highlight overlay + textarea stacked */}
+        <div className="flex-1 relative overflow-hidden">
+          {/* Syntax highlight overlay — pointer-events-none, matches textarea exactly */}
+          {enableSyntaxHighlight && mounted && (
+            <div
+              ref={highlightRef}
+              aria-hidden
+              className="absolute inset-0 pointer-events-none overflow-hidden font-mono"
+              style={{
+                fontSize: `${fontSize}px`,
+                lineHeight: "1.5em",
+                padding: "1rem",
+                whiteSpace: wordWrap ? "pre-wrap" : "pre",
+                wordBreak: wordWrap ? "break-words" : "normal",
+                overflowX: wordWrap ? "hidden" : "scroll",
+                overflowY: "scroll",
+                // Scrollbars hidden visually
+                scrollbarWidth: "none",
+              }}
+            >
+              {lines.map((line, lineIdx) => {
+                const lineStart = lineOffsets[lineIdx]
+                const lineEnd = lineStart + line.length
+                const spans = renderLine(tokens, lineStart, lineEnd, line)
+                return (
+                  <div key={lineIdx} style={{ height: "1.5em", display: "block", minHeight: "1.5em" }}>
+                    {spans.length === 0
+                      ? <span> </span>
+                      : spans.map((span, si) => (
+                          <span key={si} className={getTokenColor(span.type, isDark)}>
+                            {span.text}
+                          </span>
+                        ))
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Actual editable textarea */}
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onScroll={handleScroll}
+            onSelect={notifySelection}
+            onMouseUp={notifySelection}
+            onKeyUp={notifySelection}
+            className={cn(
+              "absolute inset-0 w-full h-full font-mono p-4 resize-none outline-none bg-transparent",
+              "scrollbar-thin",
+              enableSyntaxHighlight && mounted
+                ? "text-transparent caret-foreground"
+                : "text-editor-cursor",
+              wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"
+            )}
             style={{
               fontSize: `${fontSize}px`,
               lineHeight: "1.5em",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-words",
-              color: "transparent",
+              tabSize: tabSize,
+              caretColor: "currentColor",
+              zIndex: 1,
             }}
-          >
-            {lines.map((line, lineIdx) => (
-              <div key={lineIdx} style={{ height: "1.5em" }}>
-                {enableSyntaxHighlight && mounted ? (
-                  line.split('').map((char, idx) => {
-                    const absolutePos = content.split('\n').slice(0, lineIdx).join('\n').length + lineIdx + idx
-                    const token = tokens.find(t => t.start <= absolutePos && t.end > absolutePos)
-                    return (
-                      <span
-                        key={idx}
-                        className={token ? getTokenColor(token.type, isDark) : "text-foreground"}
-                      >
-                        {char}
-                      </span>
-                    )
-                  })
-                ) : (
-                  line
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Textarea - Actual Editor */}
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onScroll={handleScroll}
-          className={cn(
-            "flex-1 bg-transparent text-editor-cursor font-mono p-4 resize-none outline-none",
-            "scrollbar-thin placeholder-muted-foreground/50",
-            enableSyntaxHighlight && mounted ? "bg-transparent/50 text-transparent caret-editor-cursor" : "",
-            wordWrap ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"
-          )}
-          style={{
-            fontSize: `${fontSize}px`,
-            lineHeight: "1.5em",
-            tabSize: tabSize,
-            caretColor: enableSyntaxHighlight && mounted ? "var(--editor-cursor)" : "auto",
-          }}
-          spellCheck="false"
-          autoCapitalize="off"
-          autoCorrect="off"
-          wrap={wordWrap ? "soft" : "off"}
-        />
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            wrap={wordWrap ? "soft" : "off"}
+            aria-label={`Code editor: ${fileName}`}
+          />
+        </div>
       </div>
 
-      {/* Status Bar */}
-      <div className="h-7 border-t border-border bg-muted/20 px-4 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{lines.length} lines</span>
+      {/* Status bar */}
+      <div className="h-7 border-t border-border bg-muted/20 px-4 flex items-center justify-between text-xs text-muted-foreground shrink-0">
+        <span>{lines.length} {lines.length === 1 ? "line" : "lines"}</span>
         <div className="flex items-center gap-3">
           <span>{content.length} chars</span>
           {onAISpotlight && (
