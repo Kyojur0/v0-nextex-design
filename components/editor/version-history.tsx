@@ -7,31 +7,41 @@ import {
   Star,
   X,
   RotateCcw,
-  Check,
   Plus,
   Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  Version,
+  listVersions,
   saveVersion,
-  getVersionsForFile,
   updateVersion,
   deleteVersion,
-  pruneOldAutoVersions,
-  formatRelativeTime,
-} from "@/lib/version-db"
+} from "@/lib/api"
+import type { VersionSnapshot } from "@/lib/api-types"
 import { useEditorStore } from "@/lib/store"
 
 interface VersionHistoryProps {
   onClose: () => void
 }
 
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime()
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return "just now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(isoString).toLocaleDateString()
+}
+
 export const VersionHistory = memo(function VersionHistory({ onClose }: VersionHistoryProps) {
   const { activeFileId, content, setContent, setIsModified } = useEditorStore()
-  const [versions, setVersions] = useState<Version[]>([])
+  const [versions, setVersions] = useState<VersionSnapshot[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [previewVersion, setPreviewVersion] = useState<Version | null>(null)
+  const [previewVersion, setPreviewVersion] = useState<VersionSnapshot | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingLabel, setEditingLabel] = useState("")
   const editInputRef = useRef<HTMLInputElement>(null)
@@ -39,63 +49,44 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
   const loadVersions = useCallback(async () => {
     if (!activeFileId) return
     setIsLoading(true)
-    try {
-      const vs = await getVersionsForFile(activeFileId)
-      setVersions(vs)
-    } finally {
-      setIsLoading(false)
-    }
+    const result = await listVersions(activeFileId)
+    if (result.ok) setVersions(result.data)
+    setIsLoading(false)
   }, [activeFileId])
 
   useEffect(() => {
     loadVersions()
   }, [loadVersions])
 
-  // Auto-save a version every 2 minutes if content changes
+  // Auto-save a version every 2 minutes when content changes
   useEffect(() => {
     if (!activeFileId || !content) return
     const timer = setTimeout(async () => {
-      await saveVersion({
-        fileId: activeFileId,
-        content,
-        label: "Auto-saved",
-        isStarred: false,
-        isAuto: true,
-        createdAt: Date.now(),
-      })
-      await pruneOldAutoVersions(activeFileId)
-      loadVersions()
+      const result = await saveVersion(activeFileId, content, "Auto-saved", true)
+      if (result.ok) loadVersions()
     }, 2 * 60 * 1000)
     return () => clearTimeout(timer)
   }, [content, activeFileId, loadVersions])
 
   const handleSaveNow = useCallback(async () => {
     if (!activeFileId) return
-    const label = `Manual save`
-    await saveVersion({
-      fileId: activeFileId,
-      content,
-      label,
-      isStarred: false,
-      isAuto: false,
-      createdAt: Date.now(),
-    })
-    loadVersions()
+    const result = await saveVersion(activeFileId, content, "Manual save", false)
+    if (result.ok) loadVersions()
   }, [activeFileId, content, loadVersions])
 
-  const handleToggleStar = useCallback(async (version: Version, e: React.MouseEvent) => {
+  const handleToggleStar = useCallback(async (version: VersionSnapshot, e: React.MouseEvent) => {
     e.stopPropagation()
-    await updateVersion(version.id, { isStarred: !version.isStarred })
-    loadVersions()
+    const result = await updateVersion(version.id, { isStarred: !version.isStarred })
+    if (result.ok) loadVersions()
   }, [loadVersions])
 
-  const handleDelete = useCallback(async (versionId: string, e: React.MouseEvent) => {
+  const handleDelete = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    await deleteVersion(versionId)
-    loadVersions()
+    const result = await deleteVersion(id)
+    if (result.ok) loadVersions()
   }, [loadVersions])
 
-  const handleStartRename = useCallback((version: Version, e: React.MouseEvent) => {
+  const handleStartRename = useCallback((version: VersionSnapshot, e: React.MouseEvent) => {
     e.stopPropagation()
     setEditingId(version.id)
     setEditingLabel(version.label)
@@ -104,9 +95,9 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
 
   const handleSaveRename = useCallback(async () => {
     if (!editingId) return
-    await updateVersion(editingId, { label: editingLabel || "Unnamed version" })
+    const result = await updateVersion(editingId, { label: editingLabel || "Unnamed version" })
+    if (result.ok) loadVersions()
     setEditingId(null)
-    loadVersions()
   }, [editingId, editingLabel, loadVersions])
 
   const handleRestore = useCallback(() => {
@@ -116,8 +107,8 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
     setPreviewVersion(null)
   }, [previewVersion, setContent, setIsModified])
 
-  const handlePreview = useCallback((version: Version) => {
-    setPreviewVersion(prev => prev?.id === version.id ? null : version)
+  const handlePreview = useCallback((version: VersionSnapshot) => {
+    setPreviewVersion((prev) => (prev?.id === version.id ? null : version))
   }, [])
 
   return (
@@ -148,12 +139,10 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
       {/* Preview restore bar */}
       {previewVersion && (
         <div className="px-3 py-2 bg-primary/10 border-b border-primary/20 shrink-0 flex items-center justify-between">
-          <span className="text-xs text-primary font-medium">Viewing: {previewVersion.label}</span>
-          <Button
-            size="sm"
-            className="h-6 px-2.5 text-xs gap-1"
-            onClick={handleRestore}
-          >
+          <span className="text-xs text-primary font-medium">
+            Viewing: {previewVersion.label}
+          </span>
+          <Button size="sm" className="h-6 px-2.5 text-xs gap-1" onClick={handleRestore}>
             <RotateCcw className="h-3 w-3" />
             Restore
           </Button>
@@ -169,9 +158,16 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
             <Clock className="h-8 w-8 text-muted-foreground/40" />
             <div>
               <p className="text-xs font-medium text-muted-foreground">No history yet</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Versions auto-save every 2 minutes, or save manually.</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">
+                Versions auto-save every 2 minutes, or save manually.
+              </p>
             </div>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handleSaveNow}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={handleSaveNow}
+            >
               <Plus className="h-3 w-3" /> Save first snapshot
             </Button>
           </div>
@@ -213,13 +209,13 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
                       <input
                         ref={editInputRef}
                         value={editingLabel}
-                        onChange={e => setEditingLabel(e.target.value)}
+                        onChange={(e) => setEditingLabel(e.target.value)}
                         onBlur={handleSaveRename}
-                        onKeyDown={e => {
+                        onKeyDown={(e) => {
                           if (e.key === "Enter") handleSaveRename()
                           if (e.key === "Escape") setEditingId(null)
                         }}
-                        onClick={e => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                         className="text-xs w-full bg-background border border-primary/40 rounded px-1.5 py-0.5 outline-none"
                       />
                     ) : (
@@ -229,12 +225,14 @@ export const VersionHistory = memo(function VersionHistory({ onClose }: VersionH
                         title="Double-click to rename"
                       >
                         {version.label}
-                        {index === 0 && <span className="ml-1.5 text-[10px] text-primary">current</span>}
+                        {index === 0 && (
+                          <span className="ml-1.5 text-[10px] text-primary">current</span>
+                        )}
                       </p>
                     )}
                     <p className="text-[11px] text-muted-foreground/70 mt-0.5">
                       {formatRelativeTime(version.createdAt)}
-                      {version.isAuto ? " · auto" : " · manual"}
+                      {version.isAutoSave ? " · auto" : " · manual"}
                     </p>
                   </div>
 

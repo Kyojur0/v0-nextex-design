@@ -22,13 +22,17 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
-import { useEditorStore, FileItem } from "@/lib/store"
+import { useEditorStore } from "@/lib/store"
+import type { FileTreeNode, FileType } from "@/lib/api-types"
 
 interface FileTreeItemProps {
-  item: FileItem
+  item: FileTreeNode
   depth: number
   activeFileId: string | null
   onFileSelect: (id: string) => void
+  onRename: (id: string, newName: string) => void
+  onDelete: (id: string) => void
+  onCreate: (parentId: string | null, name: string, type: FileType) => void
 }
 
 const FileTreeItemComponent = memo(function FileTreeItem({
@@ -36,35 +40,37 @@ const FileTreeItemComponent = memo(function FileTreeItem({
   depth,
   activeFileId,
   onFileSelect,
+  onRename,
+  onDelete,
+  onCreate,
 }: FileTreeItemProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isRenaming, setIsRenaming] = useState(false)
   const [newName, setNewName] = useState(item.name)
-  
-  const { renameFile, deleteFile, createFile } = useEditorStore()
-  
+
   const isActive = activeFileId === item.id
   const isFolder = item.type === "folder"
 
-  const handleRename = useCallback(() => {
-    if (newName.trim() && newName !== item.name) {
-      renameFile(item.id, newName.trim())
+  const handleRenameCommit = useCallback(() => {
+    const trimmed = newName.trim()
+    if (trimmed && trimmed !== item.name) {
+      onRename(item.id, trimmed)
     }
     setIsRenaming(false)
     setNewName(item.name)
-  }, [newName, item.id, item.name, renameFile])
+  }, [newName, item.id, item.name, onRename])
 
-  const handleDelete = useCallback(() => {
-    deleteFile(item.id)
-  }, [item.id, deleteFile])
+  const handleDeleteClick = useCallback(() => {
+    onDelete(item.id)
+  }, [item.id, onDelete])
 
   const handleCreateFile = useCallback(() => {
-    createFile(item.id, "untitled.tex", "file")
-  }, [item.id, createFile])
+    onCreate(item.id, "untitled.tex", "file")
+  }, [item.id, onCreate])
 
   const handleCreateFolder = useCallback(() => {
-    createFile(item.id, "New Folder", "folder")
-  }, [item.id, createFile])
+    onCreate(item.id, "New Folder", "folder")
+  }, [item.id, onCreate])
 
   return (
     <div>
@@ -77,11 +83,8 @@ const FileTreeItemComponent = memo(function FileTreeItem({
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         onClick={() => {
-          if (isFolder) {
-            setIsExpanded(!isExpanded)
-          } else {
-            onFileSelect(item.id)
-          }
+          if (isFolder) setIsExpanded((v) => !v)
+          else onFileSelect(item.id)
         }}
       >
         {isFolder ? (
@@ -109,13 +112,10 @@ const FileTreeItemComponent = memo(function FileTreeItem({
             autoFocus
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            onBlur={handleRename}
+            onBlur={handleRenameCommit}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleRename()
-              if (e.key === "Escape") {
-                setIsRenaming(false)
-                setNewName(item.name)
-              }
+              if (e.key === "Enter") handleRenameCommit()
+              if (e.key === "Escape") { setIsRenaming(false); setNewName(item.name) }
             }}
             onClick={(e) => e.stopPropagation()}
             className="flex-1 bg-transparent px-1 outline-none border-b border-accent focus:border-foreground"
@@ -124,7 +124,7 @@ const FileTreeItemComponent = memo(function FileTreeItem({
           <span className="flex-1 truncate text-xs">{item.name}</span>
         )}
 
-        {/* Context Menu */}
+        {/* Context menu */}
         <div className="opacity-0 group-hover:opacity-100 transition-opacity">
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -133,7 +133,7 @@ const FileTreeItemComponent = memo(function FileTreeItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuItem onClick={() => setIsRenaming(true)}>
+              <DropdownMenuItem onClick={() => { setIsRenaming(true); setNewName(item.name) }}>
                 <Edit2 className="mr-2 h-3 w-3" />
                 Rename
               </DropdownMenuItem>
@@ -151,7 +151,7 @@ const FileTreeItemComponent = memo(function FileTreeItem({
                 </>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+              <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive">
                 <Trash2 className="mr-2 h-3 w-3" />
                 Delete
               </DropdownMenuItem>
@@ -170,6 +170,9 @@ const FileTreeItemComponent = memo(function FileTreeItem({
               depth={depth + 1}
               activeFileId={activeFileId}
               onFileSelect={onFileSelect}
+              onRename={onRename}
+              onDelete={onDelete}
+              onCreate={onCreate}
             />
           ))}
         </div>
@@ -179,10 +182,13 @@ const FileTreeItemComponent = memo(function FileTreeItem({
 })
 
 interface FileTreeProps {
-  files: FileItem[]
+  files: FileTreeNode[]
   activeFileId: string | null
   onFileSelect: (id: string) => void
   onShowHistory: () => void
+  onRename: (id: string, newName: string) => void
+  onDelete: (id: string) => void
+  onCreate: (parentId: string | null, name: string, type: FileType) => void
 }
 
 export const FileTree = memo(function FileTree({
@@ -190,16 +196,11 @@ export const FileTree = memo(function FileTree({
   activeFileId,
   onFileSelect,
   onShowHistory,
+  onRename,
+  onDelete,
+  onCreate,
 }: FileTreeProps) {
-  const { projectName, createFile } = useEditorStore()
-
-  const handleCreateRootFile = useCallback(() => {
-    createFile(null, "untitled.tex", "file")
-  }, [createFile])
-
-  const handleCreateRootFolder = useCallback(() => {
-    createFile(null, "New Folder", "folder")
-  }, [createFile])
+  const { projectName } = useEditorStore()
 
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
@@ -215,11 +216,11 @@ export const FileTree = memo(function FileTree({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40">
-            <DropdownMenuItem onClick={handleCreateRootFile}>
+            <DropdownMenuItem onClick={() => onCreate(null, "untitled.tex", "file")}>
               <FileText className="mr-2 h-3 w-3" />
               New File
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleCreateRootFolder}>
+            <DropdownMenuItem onClick={() => onCreate(null, "New Folder", "folder")}>
               <Folder className="mr-2 h-3 w-3" />
               New Folder
             </DropdownMenuItem>
@@ -241,12 +242,15 @@ export const FileTree = memo(function FileTree({
               depth={0}
               activeFileId={activeFileId}
               onFileSelect={onFileSelect}
+              onRename={onRename}
+              onDelete={onDelete}
+              onCreate={onCreate}
             />
           ))
         )}
       </div>
 
-      {/* Footer: History tab */}
+      {/* Footer: Version History tab */}
       <div className="shrink-0 border-t border-sidebar-border">
         <button
           onClick={onShowHistory}

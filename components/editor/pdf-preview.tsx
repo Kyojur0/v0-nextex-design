@@ -7,16 +7,20 @@ import {
   ZoomOut,
   Download,
   Maximize2,
+  ExternalLink,
 } from "lucide-react"
 
 interface PdfPreviewProps {
   fileName: string
   isBuilding: boolean
+  /** URL returned by getPdfUrl() after a successful build. Null = no build yet. */
+  pdfUrl?: string | null
 }
 
 export const PdfPreview = memo(function PdfPreview({
   fileName,
   isBuilding,
+  pdfUrl,
 }: PdfPreviewProps) {
   const [zoom, setZoom] = useState(100)
 
@@ -69,9 +73,22 @@ export const PdfPreview = memo(function PdfPreview({
           >
             <Maximize2 className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" disabled={isBuilding}>
-            <Download className="h-3.5 w-3.5" />
-          </Button>
+          {pdfUrl ? (
+            <a
+              href={pdfUrl}
+              download={fileName}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Download PDF"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" disabled>
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 

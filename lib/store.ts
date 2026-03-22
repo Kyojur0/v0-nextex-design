@@ -1,14 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { FileTreeNode, BuildLogEntry } from '@/lib/api-types'
 
-export interface FileItem {
-  id: string
-  name: string
-  type: 'file' | 'folder'
-  children?: FileItem[]
-  isMain?: boolean
-  content?: string
-}
+// Re-export for components that imported FileItem from here previously.
+// FileTreeNode is the canonical type — it has id, name, type, parentId, content,
+// isMainFile, and an optional children array for folders.
+export type { FileTreeNode as FileItem } from '@/lib/api-types'
 
 export interface EditorSettings {
   fontSize: number
@@ -23,27 +20,23 @@ export interface EditorSettings {
   aiProvider: 'openai' | 'anthropic' | 'google' | 'xai'
 }
 
-export interface FileOperation {
-  id: string
-  type: 'rename' | 'delete' | 'create'
-  itemId?: string
-  oldName?: string
-  newName?: string
-  parentId?: string
-}
-
 interface EditorStore {
-  // File Management
-  files: FileItem[]
+  // File Management (populated via API)
+  files: FileTreeNode[]
   activeFileId: string | null
   projectName: string
-  
+
   // Editor State
   content: string
   isModified: boolean
   isBuilding: boolean
   hasError: boolean
-  
+
+  // Build State
+  buildLogs: BuildLogEntry[]
+  currentBuildId: string | null
+  pdfUrl: string | null
+
   // UI State
   showBuildLog: boolean
   showTemplateModal: boolean
@@ -53,27 +46,24 @@ interface EditorStore {
   showAISpotlight: boolean
   sidebarWidth: number
   isDragging: boolean
-  
+
   // Settings
   settings: EditorSettings
-  
-  // Build State
-  buildLogs: Array<{
-    type: 'info' | 'warning' | 'error' | 'success'
-    message: string
-    line?: number
-    timestamp: string
-  }>
-  
+
   // Recent Files
   recentFiles: string[]
-  
-  // Actions
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+
+  setFiles: (files: FileTreeNode[]) => void
   setActiveFile: (id: string | null, content: string) => void
   setContent: (content: string) => void
   setIsModified: (value: boolean) => void
   setIsBuilding: (value: boolean) => void
   setHasError: (value: boolean) => void
+  setBuildLogs: (logs: BuildLogEntry[]) => void
+  setCurrentBuildId: (id: string | null) => void
+  setPdfUrl: (url: string | null) => void
   setShowBuildLog: (value: boolean) => void
   setShowTemplateModal: (value: boolean) => void
   setShowSettings: (value: boolean) => void
@@ -83,22 +73,14 @@ interface EditorStore {
   setSidebarWidth: (width: number) => void
   setIsDragging: (value: boolean) => void
   setSettings: (settings: Partial<EditorSettings>) => void
-  setFiles: (files: FileItem[]) => void
   setProjectName: (name: string) => void
-  setBuildLogs: (logs: EditorStore['buildLogs']) => void
   addRecentFile: (filePath: string) => void
-  
-  // File Operations
-  renameFile: (id: string, newName: string) => void
-  deleteFile: (id: string) => void
-  createFile: (parentId: string | null, name: string, type: 'file' | 'folder') => void
-  updateFileContent: (id: string, content: string) => void
 }
 
 export const useEditorStore = create<EditorStore>()(
   persist(
-    (set, get) => ({
-      // Initial State
+    (set) => ({
+      // Initial state
       files: [],
       activeFileId: null,
       projectName: 'Untitled Project',
@@ -106,6 +88,9 @@ export const useEditorStore = create<EditorStore>()(
       isModified: false,
       isBuilding: false,
       hasError: false,
+      buildLogs: [],
+      currentBuildId: null,
+      pdfUrl: null,
       showBuildLog: false,
       showTemplateModal: false,
       showSettings: false,
@@ -114,7 +99,6 @@ export const useEditorStore = create<EditorStore>()(
       showAISpotlight: false,
       sidebarWidth: 240,
       isDragging: false,
-      buildLogs: [],
       recentFiles: [],
       settings: {
         fontSize: 14,
@@ -128,13 +112,17 @@ export const useEditorStore = create<EditorStore>()(
         aiModel: 'openai/gpt-4o-mini',
         aiProvider: 'openai',
       },
-      
+
       // Actions
+      setFiles: (files) => set({ files }),
       setActiveFile: (id, content) => set({ activeFileId: id, content }),
       setContent: (content) => set({ content }),
       setIsModified: (value) => set({ isModified: value }),
       setIsBuilding: (value) => set({ isBuilding: value }),
       setHasError: (value) => set({ hasError: value }),
+      setBuildLogs: (logs) => set({ buildLogs: logs }),
+      setCurrentBuildId: (id) => set({ currentBuildId: id }),
+      setPdfUrl: (url) => set({ pdfUrl: url }),
       setShowBuildLog: (value) => set({ showBuildLog: value }),
       setShowTemplateModal: (value) => set({ showTemplateModal: value }),
       setShowSettings: (value) => set({ showSettings: value }),
@@ -144,12 +132,8 @@ export const useEditorStore = create<EditorStore>()(
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setIsDragging: (value) => set({ isDragging: value }),
       setSettings: (newSettings) =>
-        set((state) => ({
-          settings: { ...state.settings, ...newSettings },
-        })),
-      setFiles: (files) => set({ files }),
+        set((state) => ({ settings: { ...state.settings, ...newSettings } })),
       setProjectName: (name) => set({ projectName: name }),
-      setBuildLogs: (logs) => set({ buildLogs: logs }),
       addRecentFile: (filePath) =>
         set((state) => ({
           recentFiles: [
@@ -157,96 +141,16 @@ export const useEditorStore = create<EditorStore>()(
             ...state.recentFiles.filter((f) => f !== filePath),
           ].slice(0, 10),
         })),
-      
-      // File Operations
-      renameFile: (id, newName) => {
-        const state = get()
-        const renameInTree = (items: FileItem[]): FileItem[] => {
-          return items.map((item) => {
-            if (item.id === id) {
-              return { ...item, name: newName }
-            }
-            if (item.children) {
-              return { ...item, children: renameInTree(item.children) }
-            }
-            return item
-          })
-        }
-        set({ files: renameInTree(state.files) })
-      },
-      
-      deleteFile: (id) => {
-        const state = get()
-        const deleteFromTree = (items: FileItem[]): FileItem[] => {
-          return items
-            .filter((item) => item.id !== id)
-            .map((item) => {
-              if (item.children) {
-                return { ...item, children: deleteFromTree(item.children) }
-              }
-              return item
-            })
-        }
-        const newFiles = deleteFromTree(state.files)
-        set({
-          files: newFiles,
-          activeFileId: state.activeFileId === id ? null : state.activeFileId,
-        })
-      },
-      
-      createFile: (parentId, name, type) => {
-        const state = get()
-        const newId = `${type}-${Date.now()}`
-        const newItem: FileItem = {
-          id: newId,
-          name,
-          type,
-          ...(type === 'folder' && { children: [] }),
-        }
-        
-        const addToTree = (items: FileItem[]): FileItem[] => {
-          if (!parentId) {
-            return [...items, newItem]
-          }
-          return items.map((item) => {
-            if (item.id === parentId && item.type === 'folder') {
-              return {
-                ...item,
-                children: [...(item.children || []), newItem],
-              }
-            }
-            if (item.children) {
-              return { ...item, children: addToTree(item.children) }
-            }
-            return item
-          })
-        }
-        
-        set({ files: addToTree(state.files) })
-      },
-      
-      updateFileContent: (id, content) => {
-        const state = get()
-        const updateInTree = (items: FileItem[]): FileItem[] => {
-          return items.map((item) => {
-            if (item.id === id) {
-              return { ...item, content }
-            }
-            if (item.children) {
-              return { ...item, children: updateInTree(item.children) }
-            }
-            return item
-          })
-        }
-        set({ files: updateInTree(state.files) })
-      },
     }),
     {
       name: 'editor-store',
+      // Only persist user preferences, never file tree or build state
       partialize: (state) => ({
         settings: state.settings,
         recentFiles: state.recentFiles,
         projectName: state.projectName,
+        sidebarWidth: state.sidebarWidth,
+        showPreview: state.showPreview,
       }),
     }
   )
