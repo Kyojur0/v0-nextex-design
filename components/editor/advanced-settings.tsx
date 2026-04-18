@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback } from "react"
+import { memo, useCallback, useState } from "react"
 import { useEditorStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { X } from "lucide-react"
+import { X, Eye, EyeOff } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 interface AdvancedSettingsProps {
@@ -68,6 +69,7 @@ export const AdvancedSettings = memo(function AdvancedSettings({
   onOpenChange,
 }: AdvancedSettingsProps) {
   const { settings, setSettings } = useEditorStore()
+  const [showApiKey, setShowApiKey] = useState(false)
 
   const handleFontSizeChange = useCallback(
     (value: string) => {
@@ -290,6 +292,39 @@ export const AdvancedSettings = memo(function AdvancedSettings({
                   )}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-api-key">API Key</Label>
+              <p className="text-xs text-muted-foreground">
+                Optional. Leave blank to use the Vercel AI Gateway (no key required). Enter your own key to call the provider directly.
+              </p>
+              <div className="relative">
+                <Input
+                  id="ai-api-key"
+                  type={showApiKey ? "text" : "password"}
+                  value={settings.aiApiKey}
+                  onChange={(e) => setSettings({ aiApiKey: e.target.value })}
+                  placeholder="sk-... or leave blank for gateway"
+                  className="pr-10 font-mono text-xs"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                >
+                  {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+              {settings.aiApiKey && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Key stored in browser localStorage only — never sent to any server except the chosen provider.
+                </p>
+              )}
             </div>
           </div>
 

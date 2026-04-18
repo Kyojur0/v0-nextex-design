@@ -404,6 +404,7 @@ function EditorInner() {
           }}
           onClose={() => setShowAISpotlight(false)}
           aiModel={settings.aiModel ?? "openai/gpt-4o-mini"}
+          aiApiKey={settings.aiApiKey || undefined}
         />
       )}
 

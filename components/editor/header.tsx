@@ -28,7 +28,6 @@ import {
   Plus,
   Clock,
   FileText,
-  Keyboard,
   PanelRight,
   PanelRightClose,
   Sparkles,
@@ -143,38 +142,7 @@ export function Header({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Edit menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-                Edit <ChevronDown className="ml-0.5 h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-52">
-              <DropdownMenuItem>Undo <span className="ml-auto text-xs text-muted-foreground">⌘Z</span></DropdownMenuItem>
-              <DropdownMenuItem>Redo <span className="ml-auto text-xs text-muted-foreground">⌘⇧Z</span></DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Find <span className="ml-auto text-xs text-muted-foreground">⌘F</span></DropdownMenuItem>
-              <DropdownMenuItem>Replace <span className="ml-auto text-xs text-muted-foreground">⌘H</span></DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          {/* Insert menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-                Insert <ChevronDown className="ml-0.5 h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem><span className="font-mono text-xs mr-2">\section</span> Section heading</DropdownMenuItem>
-              <DropdownMenuItem><span className="font-mono text-xs mr-2">\exp</span> Experience entry</DropdownMenuItem>
-              <DropdownMenuItem><span className="font-mono text-xs mr-2">\edu</span> Education entry</DropdownMenuItem>
-              <DropdownMenuItem><span className="font-mono text-xs mr-2">\skill</span> Skills row</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem><Keyboard className="mr-2 h-4 w-4" /> All Snippets...</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </nav>
 
         {/* Project name + modified dot */}

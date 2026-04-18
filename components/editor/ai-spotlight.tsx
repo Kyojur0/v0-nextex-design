@@ -11,6 +11,8 @@ interface AISpotlightProps {
   onAccept: (newContent: string) => void
   onClose: () => void
   aiModel: string
+  /** Optional user-supplied API key. If absent the Vercel AI Gateway is used. */
+  aiApiKey?: string
 }
 
 type Stage = "input" | "loading" | "diff"
@@ -44,6 +46,7 @@ export const AISpotlight = memo(function AISpotlight({
   onAccept,
   onClose,
   aiModel,
+  aiApiKey,
 }: AISpotlightProps) {
   const [stage, setStage] = useState<Stage>("input")
   const [prompt, setPrompt] = useState("")
@@ -70,6 +73,8 @@ export const AISpotlight = memo(function AISpotlight({
           prompt: promptText,
           code: selectedCode || currentContent,
           model: aiModel,
+          // Only send the key when the user has configured one
+          ...(aiApiKey ? { apiKey: aiApiKey } : {}),
         }),
       })
       const data = await res.json()
