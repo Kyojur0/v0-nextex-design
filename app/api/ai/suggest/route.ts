@@ -59,7 +59,6 @@ Only make the specific changes requested.`
       model: resolvedModel,
       system: systemPrompt,
       prompt: userPrompt,
-      maxTokens: 4000,
       temperature: 0.3,
     })
 

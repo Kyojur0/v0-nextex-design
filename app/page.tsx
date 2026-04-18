@@ -429,7 +429,7 @@ function EditorInner() {
 
 export default function EditorPage() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem suppressHydrationWarning>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <ColorPaletteProvider>
         <EditorInner />
       </ColorPaletteProvider>

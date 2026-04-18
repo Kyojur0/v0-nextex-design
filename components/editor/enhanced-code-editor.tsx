@@ -147,7 +147,7 @@ export const EnhancedCodeEditor = memo(function EnhancedCodeEditor({
                 lineHeight: "1.5em",
                 padding: "1rem",
                 whiteSpace: wordWrap ? "pre-wrap" : "pre",
-                wordBreak: wordWrap ? "break-words" : "normal",
+                wordBreak: wordWrap ? "break-word" : "normal",
                 overflowX: wordWrap ? "hidden" : "scroll",
                 overflowY: "scroll",
                 // Scrollbars hidden visually
