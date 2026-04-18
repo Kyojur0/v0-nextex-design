@@ -293,7 +293,6 @@ export const AdvancedSettings = memo(function AdvancedSettings({
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
             <div className="space-y-2">
               <Label htmlFor="ai-api-key">API Key</Label>
