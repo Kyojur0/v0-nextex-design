@@ -13,9 +13,9 @@ import { createXai } from "@ai-sdk/xai"
  *   handles auth automatically — the model string `"openai/gpt-4o-mini"` is
  *   passed straight through.
  */
-function resolveModel(modelStr: string, apiKey: string | undefined) {
+function resolveModel(modelStr: string, apiKey: string | undefined): any {
   // If no user key, let the Gateway handle it (model string pass-through)
-  if (!apiKey) return modelStr as any
+  if (!apiKey) return modelStr
 
   // With a user key we must use the provider-specific SDK client
   const [provider, ...rest] = modelStr.split("/")
@@ -32,7 +32,7 @@ function resolveModel(modelStr: string, apiKey: string | undefined) {
       return createXai({ apiKey })(modelId || "grok-3-mini")
     default:
       // Unknown provider — fall back to gateway
-      return modelStr as any
+      return modelStr
   }
 }
 
